@@ -1,6 +1,6 @@
-# NutriAI / Qima
+#Qima
 
-NutriAI is an AI-powered nutrition assistant focused on two main user journeys:
+Qima is an AI-powered nutrition assistant focused on two main user journeys:
 
 - packaged-food understanding through barcode lookup
 - non-barcode food understanding through image-based recognition
