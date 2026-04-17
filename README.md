@@ -1,4 +1,4 @@
-#Qima
+# Qima
 
 Qima is an AI-powered nutrition assistant focused on two main user journeys:
 
