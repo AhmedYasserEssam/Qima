@@ -1,0 +1,472 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/recipes_discuss.json",
+  "title": "Recipe Discuss API Contract V1",
+  "description": "Contract-first schema for POST /v1/recipes/discuss request and response. This endpoint does not expose a numeric confidence field; grounding is represented through grounded_references and structured safety output.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["endpoint", "method", "request", "responses"],
+  "properties": {
+    "endpoint": {
+      "const": "/v1/recipes/discuss"
+    },
+    "method": {
+      "const": "POST"
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contentType", "body"],
+      "properties": {
+        "contentType": {
+          "const": "application/json"
+        },
+        "body": {
+          "$ref": "#/$defs/RecipeDiscussRequest"
+        }
+      }
+    },
+    "responses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["200", "400", "404", "422", "429", "500", "503"],
+      "properties": {
+        "200": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["description", "body"],
+          "properties": {
+            "description": {
+              "const": "Successful grounded recipe discussion response"
+            },
+            "body": {
+              "$ref": "#/$defs/RecipeDiscussSuccess"
+            }
+          }
+        },
+        "400": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "404": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "422": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "429": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "500": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "503": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "RecipeDiscussRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["question"],
+      "properties": {
+        "recipe_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Canonical recipe identifier when discussing a specific suggested recipe."
+        },
+        "candidate_context": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Structured recipe candidate context when no single recipe_id is available.",
+          "required": ["title"],
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1
+            },
+            "matched_ingredients": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "missing_ingredients": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "User follow-up question about the recipe or candidate context."
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["recipe_id"]
+        },
+        {
+          "required": ["candidate_context"]
+        }
+      ]
+    },
+    "RecipeDiscussSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "answer",
+        "grounded_references",
+        "safety_flags",
+        "latency_ms"
+      ],
+      "properties": {
+        "answer": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Grounded backend answer derived from retrieved recipe references."
+        },
+        "grounded_references": {
+          "type": "array",
+          "description": "Recipe corpus references that support the answer. grounded_references.recipe_id may contain a backend-resolved canonical recipe ID even when the request used candidate_context rather than recipe_id.",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/GroundedReference"
+          }
+        },
+        "safety_flags": {
+          "$ref": "#/$defs/SafetyFlags"
+        },
+        "warnings": {
+          "type": "array",
+          "description": "Optional backend warnings about weak grounding, substitutions, or incomplete context.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "latency_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Backend end-to-end latency in milliseconds."
+        }
+      }
+    },
+    "GroundedReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipe_id",
+        "title",
+        "reference_type",
+        "reference_text"
+      ],
+      "properties": {
+        "recipe_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reference_type": {
+          "type": "string",
+          "enum": [
+            "ingredient",
+            "instruction",
+            "metadata"
+          ]
+        },
+        "reference_text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Short retrieved recipe snippet used as grounding; not guaranteed to include the full original recipe text."
+        }
+      }
+    },
+    "SafetyFlags": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allergen_risk",
+        "undercooked_risk",
+        "cross_contamination_risk",
+        "diet_conflict",
+        "notes"
+      ],
+      "properties": {
+        "allergen_risk": {
+          "type": "boolean"
+        },
+        "undercooked_risk": {
+          "type": "boolean"
+        },
+        "cross_contamination_risk": {
+          "type": "boolean"
+        },
+        "diet_conflict": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "array",
+          "description": "Human-readable safety notes when one or more risks are present.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "ErrorResponseSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "body"],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "body": {
+          "$ref": "contracts/v1/error_response.json"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "endpoint": "/v1/recipes/discuss",
+      "method": "POST",
+      "request": {
+        "contentType": "application/json",
+        "body": {
+          "recipe_id": "recipe_001",
+          "question": "Can I replace butter with olive oil in this recipe?"
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful grounded recipe discussion response",
+          "body": {
+            "answer": "Yes, olive oil can replace butter in this recipe, but the texture and flavor may change slightly. Use a similar amount and add it during the sauté step rather than as a finishing fat.",
+            "grounded_references": [
+              {
+                "recipe_id": "recipe_001",
+                "title": "Tomato Lentil Skillet",
+                "reference_type": "ingredient",
+                "reference_text": "2 tbsp butter"
+              },
+              {
+                "recipe_id": "recipe_001",
+                "title": "Tomato Lentil Skillet",
+                "reference_type": "instruction",
+                "reference_text": "Melt the butter in a skillet, then sauté the onion and garlic."
+              }
+            ],
+            "safety_flags": {
+              "allergen_risk": false,
+              "undercooked_risk": false,
+              "cross_contamination_risk": false,
+              "diet_conflict": false,
+              "notes": []
+            },
+            "warnings": [],
+            "latency_ms": 734
+          }
+        },
+        "400": {
+          "description": "Malformed request or missing discussion context",
+          "body": {
+            "error": {
+              "code": "BAD_REQUEST",
+              "message": "Request must include exactly one of recipe_id or candidate_context, plus a question.",
+              "retryable": false,
+              "request_id": "req_30001"
+            }
+          }
+        },
+        "404": {
+          "description": "Recipe or candidate context not found",
+          "body": {
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "No matching recipe context was found for the supplied discussion request.",
+              "retryable": false,
+              "request_id": "req_30002"
+            }
+          }
+        },
+        "422": {
+          "description": "Request validation failed",
+          "body": {
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "Request body failed schema validation.",
+              "retryable": false,
+              "request_id": "req_30003"
+            }
+          }
+        },
+        "429": {
+          "description": "Rate limit exceeded",
+          "body": {
+            "error": {
+              "code": "RATE_LIMITED",
+              "message": "Too many requests. Try again later.",
+              "retryable": true,
+              "request_id": "req_30004"
+            }
+          }
+        },
+        "500": {
+          "description": "Unexpected internal failure",
+          "body": {
+            "error": {
+              "code": "INTERNAL_ERROR",
+              "message": "Unexpected server error.",
+              "retryable": true,
+              "request_id": "req_30005"
+            }
+          }
+        },
+        "503": {
+          "description": "Recipe discussion service unavailable",
+          "body": {
+            "error": {
+              "code": "UPSTREAM_UNAVAILABLE",
+              "message": "Recipe discussion service is currently unavailable.",
+              "retryable": true,
+              "request_id": "req_30006"
+            }
+          }
+        }
+      }
+    },
+    {
+      "endpoint": "/v1/recipes/discuss",
+      "method": "POST",
+      "request": {
+        "contentType": "application/json",
+        "body": {
+          "candidate_context": {
+            "title": "Creamy Mushroom Pasta",
+            "matched_ingredients": ["mushrooms", "pasta", "garlic"],
+            "missing_ingredients": ["cream", "parmesan"]
+          },
+          "question": "Is this recipe safe for someone with a dairy allergy?"
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful grounded recipe discussion response",
+          "body": {
+            "answer": "Not as written. The recipe context indicates dairy-containing ingredients such as cream and parmesan, so it would conflict with a dairy allergy unless those are replaced with suitable alternatives.",
+            "grounded_references": [
+              {
+                "recipe_id": "recipe_045",
+                "title": "Creamy Mushroom Pasta",
+                "reference_type": "ingredient",
+                "reference_text": "1 cup cream"
+              },
+              {
+                "recipe_id": "recipe_045",
+                "title": "Creamy Mushroom Pasta",
+                "reference_type": "ingredient",
+                "reference_text": "1/2 cup parmesan"
+              },
+              {
+                "recipe_id": "recipe_045",
+                "title": "Creamy Mushroom Pasta",
+                "reference_type": "metadata",
+                "reference_text": "Missing ingredients: cream, parmesan"
+              }
+            ],
+            "safety_flags": {
+              "allergen_risk": true,
+              "undercooked_risk": false,
+              "cross_contamination_risk": false,
+              "diet_conflict": true,
+              "notes": [
+                "Recipe context includes dairy ingredients that may conflict with a dairy allergy."
+              ]
+            },
+            "warnings": [],
+            "latency_ms": 801
+          }
+        },
+        "400": {
+          "description": "Malformed request or missing discussion context",
+          "body": {
+            "error": {
+              "code": "BAD_REQUEST",
+              "message": "Request must include exactly one of recipe_id or candidate_context, plus a question.",
+              "retryable": false,
+              "request_id": "req_30011"
+            }
+          }
+        },
+        "404": {
+          "description": "Recipe or candidate context not found",
+          "body": {
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "No matching recipe context was found for the supplied discussion request.",
+              "retryable": false,
+              "request_id": "req_30012"
+            }
+          }
+        },
+        "422": {
+          "description": "Request validation failed",
+          "body": {
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "Request body failed schema validation.",
+              "retryable": false,
+              "request_id": "req_30013"
+            }
+          }
+        },
+        "429": {
+          "description": "Rate limit exceeded",
+          "body": {
+            "error": {
+              "code": "RATE_LIMITED",
+              "message": "Too many requests. Try again later.",
+              "retryable": true,
+              "request_id": "req_30014"
+            }
+          }
+        },
+        "500": {
+          "description": "Unexpected internal failure",
+          "body": {
+            "error": {
+              "code": "INTERNAL_ERROR",
+              "message": "Unexpected server error.",
+              "retryable": true,
+              "request_id": "req_30015"
+            }
+          }
+        },
+        "503": {
+          "description": "Recipe discussion service unavailable",
+          "body": {
+            "error": {
+              "code": "UPSTREAM_UNAVAILABLE",
+              "message": "Recipe discussion service is currently unavailable.",
+              "retryable": true,
+              "request_id": "req_30016"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

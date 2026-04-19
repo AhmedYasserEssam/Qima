@@ -1,0 +1,513 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/recipes_suggest.json",
+  "title": "Recipe Suggest API Contract V1",
+  "description": "Contract-first schema for POST /v1/recipes/suggest request and response. This endpoint uses retrieval-first recipe suggestion based on pantry items or recognized ingredients.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["endpoint", "method", "request", "responses"],
+  "properties": {
+    "endpoint": {
+      "const": "/v1/recipes/suggest"
+    },
+    "method": {
+      "const": "POST"
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contentType", "body"],
+      "properties": {
+        "contentType": {
+          "const": "application/json"
+        },
+        "body": {
+          "$ref": "#/$defs/RecipeSuggestRequest"
+        }
+      }
+    },
+    "responses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["200", "400", "404", "422", "429", "500", "503"],
+      "properties": {
+        "200": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["description", "body"],
+          "properties": {
+            "description": {
+              "const": "Successful recipe suggestion response"
+            },
+            "body": {
+              "$ref": "#/$defs/RecipeSuggestSuccess"
+            }
+          }
+        },
+        "400": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "404": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "422": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "429": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "500": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "503": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "RecipeSuggestRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pantry_items": {
+          "type": "array",
+          "description": "User pantry items available for recipe suggestion.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "recognized_ingredients": {
+          "type": "array",
+          "description": "Ingredients recognized from prior flows such as vision or manual ingredient extraction.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "dietary_filters": {
+          "type": "array",
+          "description": "Optional dietary filters used to exclude unsuitable recipe candidates.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "excluded_ingredients": {
+          "type": "array",
+          "description": "Ingredients the user does not want included in suggestions.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "max_results": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Maximum number of recipe candidates requested."
+        }
+      },
+      "anyOf": [
+        {
+          "required": ["pantry_items"]
+        },
+        {
+          "required": ["recognized_ingredients"]
+        }
+      ]
+    },
+    "RecipeSuggestSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recipes", "source", "latency_ms"],
+      "properties": {
+        "recipes": {
+          "type": "array",
+          "description": "Retrieved recipe candidates ranked by backend match logic.",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/RecipeCandidate"
+          }
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        },
+        "latency_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Backend end-to-end latency in milliseconds."
+        }
+      }
+    },
+    "RecipeCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipe_id",
+        "title",
+        "match_score",
+        "matched_ingredients",
+        "missing_ingredients",
+        "exclusions",
+        "warnings",
+        "grounding_metadata"
+      ],
+      "properties": {
+        "recipe_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable identifier from the recipe corpus."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "match_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Backend-computed retrieval score for the recipe candidate."
+        },
+        "matched_ingredients": {
+          "type": "array",
+          "description": "Ingredients from the user context that matched this recipe candidate.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "missing_ingredients": {
+          "type": "array",
+          "description": "Ingredients required by the recipe but not present in the user context.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "exclusions": {
+          "type": "array",
+          "description": "Dietary or ingredient exclusions that were considered while ranking this recipe candidate.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "description": "Grounded warnings derived from retrieved recipe content or backend rules.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "grounding_metadata": {
+          "$ref": "#/$defs/GroundingMetadata"
+        }
+      }
+    },
+    "GroundingMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retrieved_from", "matched_count", "missing_count"],
+      "properties": {
+        "retrieved_from": {
+          "type": "string",
+          "enum": ["recipe_corpus_primary"],
+          "description": "Backend recipe corpus used for retrieval."
+        },
+        "matched_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "missing_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "Source": {
+      "type": "object",
+      "description": "Normalized source metadata for the retrieval corpus used by the backend.",
+      "additionalProperties": false,
+      "required": ["dataset", "retrieval_mode", "source_type"],
+      "properties": {
+        "dataset": {
+          "type": "string",
+          "enum": ["recipe_corpus_primary"],
+          "description": "Stable public identifier for the recipe retrieval corpus."
+        },
+        "retrieval_mode": {
+          "type": "string",
+          "enum": ["retrieval_first"],
+          "description": "Locked retrieval strategy used by the backend."
+        },
+        "source_type": {
+          "type": "string",
+          "enum": ["recipe_corpus"]
+        }
+      }
+    },
+    "ErrorResponseSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "body"],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "body": {
+          "$ref": "contracts/v1/error_response.json"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "endpoint": "/v1/recipes/suggest",
+      "method": "POST",
+      "request": {
+        "contentType": "application/json",
+        "body": {
+          "pantry_items": ["lentils", "rice", "onion", "tomato sauce"],
+          "dietary_filters": ["vegetarian"],
+          "excluded_ingredients": ["mushrooms"],
+          "max_results": 3
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful recipe suggestion response",
+          "body": {
+            "recipes": [
+              {
+                "recipe_id": "recipe_101",
+                "title": "Simple Koshari Bowl",
+                "match_score": 0.92,
+                "matched_ingredients": ["lentils", "rice", "onion", "tomato sauce"],
+                "missing_ingredients": ["pasta", "chickpeas"],
+                "exclusions": ["vegetarian", "mushrooms"],
+                "warnings": [],
+                "grounding_metadata": {
+                  "retrieved_from": "recipe_corpus_primary",
+                  "matched_count": 4,
+                  "missing_count": 2
+                }
+              },
+              {
+                "recipe_id": "recipe_202",
+                "title": "Lentil Rice Skillet",
+                "match_score": 0.84,
+                "matched_ingredients": ["lentils", "rice", "onion"],
+                "missing_ingredients": ["garlic"],
+                "exclusions": ["vegetarian", "mushrooms"],
+                "warnings": [],
+                "grounding_metadata": {
+                  "retrieved_from": "recipe_corpus_primary",
+                  "matched_count": 3,
+                  "missing_count": 1
+                }
+              }
+            ],
+            "source": {
+              "dataset": "recipe_corpus_primary",
+              "retrieval_mode": "retrieval_first",
+              "source_type": "recipe_corpus"
+            },
+            "latency_ms": 612
+          }
+        },
+        "400": {
+          "description": "Malformed request or missing recipe suggestion input",
+          "body": {
+            "error": {
+              "code": "BAD_REQUEST",
+              "message": "Request must include pantry_items or recognized_ingredients.",
+              "retryable": false,
+              "request_id": "req_40001"
+            }
+          }
+        },
+        "404": {
+          "description": "No matching recipe suggestions found",
+          "body": {
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "No matching recipe suggestions were found for the supplied input.",
+              "retryable": false,
+              "request_id": "req_40002"
+            }
+          }
+        },
+        "422": {
+          "description": "Request validation failed",
+          "body": {
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "Request body failed schema validation.",
+              "retryable": false,
+              "request_id": "req_40003"
+            }
+          }
+        },
+        "429": {
+          "description": "Rate limit exceeded",
+          "body": {
+            "error": {
+              "code": "RATE_LIMITED",
+              "message": "Too many requests. Try again later.",
+              "retryable": true,
+              "request_id": "req_40004"
+            }
+          }
+        },
+        "500": {
+          "description": "Unexpected internal failure",
+          "body": {
+            "error": {
+              "code": "INTERNAL_ERROR",
+              "message": "Unexpected server error.",
+              "retryable": true,
+              "request_id": "req_40005"
+            }
+          }
+        },
+        "503": {
+          "description": "Recipe suggestion service unavailable",
+          "body": {
+            "error": {
+              "code": "UPSTREAM_UNAVAILABLE",
+              "message": "Recipe suggestion service is currently unavailable.",
+              "retryable": true,
+              "request_id": "req_40006"
+            }
+          }
+        }
+      }
+    },
+    {
+      "endpoint": "/v1/recipes/suggest",
+      "method": "POST",
+      "request": {
+        "contentType": "application/json",
+        "body": {
+          "recognized_ingredients": ["chicken", "garlic", "lemon"],
+          "dietary_filters": ["high_protein"],
+          "max_results": 2
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful recipe suggestion response",
+          "body": {
+            "recipes": [
+              {
+                "recipe_id": "recipe_305",
+                "title": "Garlic Lemon Chicken",
+                "match_score": 0.89,
+                "matched_ingredients": ["chicken", "garlic", "lemon"],
+                "missing_ingredients": ["olive oil", "black pepper"],
+                "exclusions": ["high_protein"],
+                "warnings": [],
+                "grounding_metadata": {
+                  "retrieved_from": "recipe_corpus_primary",
+                  "matched_count": 3,
+                  "missing_count": 2
+                }
+              },
+              {
+                "recipe_id": "recipe_411",
+                "title": "Roasted Chicken with Lemon Sauce",
+                "match_score": 0.78,
+                "matched_ingredients": ["chicken", "lemon"],
+                "missing_ingredients": ["butter", "parsley", "garlic"],
+                "exclusions": ["high_protein"],
+                "warnings": [
+                  "One or more core ingredients are missing from the recognized ingredient set."
+                ],
+                "grounding_metadata": {
+                  "retrieved_from": "recipe_corpus_primary",
+                  "matched_count": 2,
+                  "missing_count": 3
+                }
+              }
+            ],
+            "source": {
+              "dataset": "recipe_corpus_primary",
+              "retrieval_mode": "retrieval_first",
+              "source_type": "recipe_corpus"
+            },
+            "latency_ms": 685
+          }
+        },
+        "400": {
+          "description": "Malformed request or missing recipe suggestion input",
+          "body": {
+            "error": {
+              "code": "BAD_REQUEST",
+              "message": "Request must include pantry_items or recognized_ingredients.",
+              "retryable": false,
+              "request_id": "req_40011"
+            }
+          }
+        },
+        "404": {
+          "description": "No matching recipe suggestions found",
+          "body": {
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "No matching recipe suggestions were found for the supplied input.",
+              "retryable": false,
+              "request_id": "req_40012"
+            }
+          }
+        },
+        "422": {
+          "description": "Request validation failed",
+          "body": {
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "Request body failed schema validation.",
+              "retryable": false,
+              "request_id": "req_40013"
+            }
+          }
+        },
+        "429": {
+          "description": "Rate limit exceeded",
+          "body": {
+            "error": {
+              "code": "RATE_LIMITED",
+              "message": "Too many requests. Try again later.",
+              "retryable": true,
+              "request_id": "req_40014"
+            }
+          }
+        },
+        "500": {
+          "description": "Unexpected internal failure",
+          "body": {
+            "error": {
+              "code": "INTERNAL_ERROR",
+              "message": "Unexpected server error.",
+              "retryable": true,
+              "request_id": "req_40015"
+            }
+          }
+        },
+        "503": {
+          "description": "Recipe suggestion service unavailable",
+          "body": {
+            "error": {
+              "code": "UPSTREAM_UNAVAILABLE",
+              "message": "Recipe suggestion service is currently unavailable.",
+              "retryable": true,
+              "request_id": "req_40016"
+            }
+          }
+        }
+      }
+    }
+  ]
+}
