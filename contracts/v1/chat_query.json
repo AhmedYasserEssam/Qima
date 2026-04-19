@@ -1,0 +1,208 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "contracts/v1/chat_query.json",
+    "title": "ChatQueryV1",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "endpoint": {
+            "const": "/v1/chat/query"
+        },
+        "method": {
+            "const": "POST"
+        },
+        "request": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "context_id",
+                "question"
+            ],
+            "properties": {
+                "context_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Opaque backend context or session identifier."
+                },
+                "question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "description": "User question in natural language."
+                },
+                "conversation_turn_id": {
+                    "type": "string",
+                    "description": "Optional client-generated id for tracing and idempotency."
+                },
+                "locale": {
+                    "type": "string",
+                    "description": "Optional BCP-47 locale such as en or ar-EG."
+                },
+                "profile_overrides": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "Optional temporary overrides for guest mode or explicit per-request override. Stored backend profile remains the default source of truth.",
+                    "properties": {
+                        "dietary_preferences": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "allergens": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "client_timestamp": {
+                    "type": "string",
+                    "format": "date-time"
+                }
+            }
+        },
+        "response": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "answer",
+                "source_references",
+                "safety_flags",
+                "latency_ms"
+            ],
+            "properties": {
+                "answer": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Grounded user-facing response."
+                },
+                "source_references": {
+                    "type": "array",
+                    "minItems": 0,
+                    "description": "Structured grounding references used by the backend to support the answer.",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                            "source_id",
+                            "source_type",
+                            "label"
+                        ],
+                        "properties": {
+                            "source_id": {
+                                "type": "string"
+                            },
+                            "source_type": {
+                                "type": "string",
+                                "enum": [
+                                    "open_food_facts",
+                                    "nutrition_dataset",
+                                    "egyptian_food_dataset",
+                                    "fooddata_central",
+                                    "recipe_corpus",
+                                    "comparison_result",
+                                    "session_context",
+                                    "other"
+                                ]
+                            },
+                            "label": {
+                                "type": "string"
+                            },
+                            "excerpt": {
+                                "type": "string"
+                            },
+                            "confidence": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                            }
+                        }
+                    }
+                },
+                "safety_flags": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                        "grounded",
+                        "medical_advice_blocked",
+                        "allergen_caution",
+                        "low_confidence"
+                    ],
+                    "properties": {
+                        "grounded": {
+                            "type": "boolean",
+                            "description": "True only when the answer is supported by at least one backend-approved source reference."
+                        },
+                        "medical_advice_blocked": {
+                            "type": "boolean"
+                        },
+                        "allergen_caution": {
+                            "type": "boolean"
+                        },
+                        "low_confidence": {
+                            "type": "boolean"
+                        },
+                        "notes": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "latency_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Backend end-to-end latency in milliseconds."
+                }
+            }
+        }
+    },
+    "required": [
+        "endpoint",
+        "method",
+        "request",
+        "response"
+    ],
+    "allOf": [
+        {
+            "if": {
+                "properties": {
+                    "response": {
+                        "properties": {
+                            "safety_flags": {
+                                "properties": {
+                                    "grounded": {
+                                        "const": true
+                                    }
+                                },
+                                "required": [
+                                    "grounded"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "safety_flags"
+                        ]
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "response": {
+                        "properties": {
+                            "source_references": {
+                                "minItems": 1
+                            }
+                        },
+                        "required": [
+                            "source_references"
+                        ]
+                    }
+                }
+            }
+        }
+    ]
+}

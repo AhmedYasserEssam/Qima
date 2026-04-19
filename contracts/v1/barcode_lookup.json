@@ -1,0 +1,424 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qima.local/contracts/barcode_lookup.json",
+  "title": "Barcode Lookup API Contract",
+  "description": "Contract-first schema for POST /barcode/lookup request and response.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["endpoint", "method", "request", "responses"],
+  "properties": {
+    "endpoint": {
+      "const": "/barcode/lookup"
+    },
+    "method": {
+      "const": "POST"
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contentType", "body"],
+      "properties": {
+        "contentType": {
+          "const": "application/json"
+        },
+        "body": {
+          "$ref": "#/$defs/BarcodeLookupRequest"
+        }
+      }
+    },
+    "responses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["200", "400", "404", "422", "429", "500", "502", "503"],
+      "properties": {
+        "200": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["description", "body"],
+          "properties": {
+            "description": {
+              "const": "Successful barcode lookup"
+            },
+            "body": {
+              "$ref": "#/$defs/BarcodeLookupSuccess"
+            }
+          }
+        },
+        "400": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "404": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "422": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "429": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "500": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "502": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "503": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "BarcodeLookupRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["barcode"],
+      "properties": {
+        "barcode": {
+          "type": "string",
+          "description": "Scanned barcode as digits only.",
+          "pattern": "^[0-9]{8,14}$",
+          "examples": ["5449000000996"]
+        }
+      }
+    },
+    "BarcodeLookupSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product_id",
+        "name",
+        "brand",
+        "nutrition",
+        "ingredients",
+        "allergens",
+        "source"
+      ],
+      "properties": {
+        "product_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Canonical backend product identifier. For MVP this may be the barcode itself or a normalized source-backed ID.",
+          "examples": ["off:5449000000996"]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "examples": ["Coca-Cola Original Taste"]
+        },
+        "brand": {
+          "type": "string",
+          "minLength": 1,
+          "examples": ["Coca-Cola"]
+        },
+        "nutrition": {
+          "$ref": "#/$defs/Nutrition"
+        },
+        "ingredients": {
+          "type": "array",
+          "description": "Normalized ingredient list in display order.",
+          "items": {
+            "$ref": "#/$defs/Ingredient"
+          }
+        },
+        "allergens": {
+          "type": "array",
+          "description": "Normalized allergen detections derived from source product data.",
+          "items": {
+            "$ref": "#/$defs/Allergen"
+          }
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        }
+      }
+    },
+    "Nutrition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["basis", "serving_size", "values"],
+      "properties": {
+        "basis": {
+          "type": "string",
+          "enum": ["per_100g", "per_100ml", "per_serving"]
+        },
+        "serving_size": {
+          "type": ["string", "null"],
+          "examples": ["330 ml", null]
+        },
+        "values": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["energy_kcal", "protein_g", "carbohydrates_g", "fat_g"],
+          "properties": {
+            "energy_kcal": {
+              "type": ["number", "null"]
+            },
+            "protein_g": {
+              "type": ["number", "null"]
+            },
+            "carbohydrates_g": {
+              "type": ["number", "null"]
+            },
+            "fat_g": {
+              "type": ["number", "null"]
+            },
+            "sugars_g": {
+              "type": ["number", "null"]
+            },
+            "fiber_g": {
+              "type": ["number", "null"]
+            },
+            "sodium_mg": {
+              "type": ["number", "null"]
+            },
+            "salt_g": {
+              "type": ["number", "null"]
+            }
+          }
+        }
+      }
+    },
+    "Ingredient": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "normalized_text", "is_allergen"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "normalized_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "is_allergen": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Allergen": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "severity", "source_text"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "examples": ["milk"]
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["contains", "may_contain", "unknown"]
+        },
+        "source_text": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "Source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "provider_product_id", "fetched_at"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "const": "Open Food Facts API"
+        },
+        "provider_product_id": {
+          "type": "string",
+          "minLength": 1,
+          "examples": ["5449000000996"]
+        },
+        "fetched_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "ErrorResponseSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "body"],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "body": {
+          "$ref": "#/$defs/ErrorEnvelope"
+        }
+      }
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["error"],
+      "properties": {
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message"],
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": [
+                "INVALID_BARCODE",
+                "BAD_REQUEST",
+                "PRODUCT_NOT_FOUND",
+                "VALIDATION_ERROR",
+                "RATE_LIMITED",
+                "UPSTREAM_UNAVAILABLE",
+                "UPSTREAM_ERROR",
+                "INTERNAL_ERROR"
+              ]
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1
+            },
+            "details": {
+              "type": ["object", "array", "string", "null"]
+            },
+            "retryable": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "endpoint": "/barcode/lookup",
+      "method": "POST",
+      "request": {
+        "contentType": "application/json",
+        "body": {
+          "barcode": "5449000000996"
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful barcode lookup",
+          "body": {
+            "product_id": "off:5449000000996",
+            "name": "Coca-Cola Original Taste",
+            "brand": "Coca-Cola",
+            "nutrition": {
+              "basis": "per_100ml",
+              "serving_size": "330 ml",
+              "values": {
+                "energy_kcal": 42,
+                "protein_g": 0,
+                "carbohydrates_g": 10.6,
+                "fat_g": 0,
+                "sugars_g": 10.6,
+                "fiber_g": 0,
+                "sodium_mg": 4,
+                "salt_g": 0.01
+              }
+            },
+            "ingredients": [
+              {
+                "text": "Carbonated water",
+                "normalized_text": "carbonated water",
+                "is_allergen": false
+              },
+              {
+                "text": "Sugar",
+                "normalized_text": "sugar",
+                "is_allergen": false
+              }
+            ],
+            "allergens": [],
+            "source": {
+              "provider": "Open Food Facts API",
+              "provider_product_id": "5449000000996",
+              "fetched_at": "2026-04-19T20:00:00Z"
+            }
+          }
+        },
+        "400": {
+          "description": "Malformed request or invalid barcode format",
+          "body": {
+            "error": {
+              "code": "BAD_REQUEST",
+              "message": "barcode must contain 8 to 14 digits",
+              "retryable": false,
+              "request_id": "req_12345"
+            }
+          }
+        },
+        "404": {
+          "description": "No product found for barcode",
+          "body": {
+            "error": {
+              "code": "PRODUCT_NOT_FOUND",
+              "message": "No product found for the supplied barcode.",
+              "details": {
+                "barcode": "0000000000000"
+              },
+              "retryable": false
+            }
+          }
+        },
+        "422": {
+          "description": "Request validation failed",
+          "body": {
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "Request body failed schema validation.",
+              "details": null,
+              "retryable": false
+            }
+          }
+        },
+        "429": {
+          "description": "Rate limit exceeded",
+          "body": {
+            "error": {
+              "code": "RATE_LIMITED",
+              "message": "Too many requests. Try again later.",
+              "details": null,
+              "retryable": true
+            }
+          }
+        },
+        "500": {
+          "description": "Unexpected internal failure",
+          "body": {
+            "error": {
+              "code": "INTERNAL_ERROR",
+              "message": "Unexpected server error.",
+              "details": null,
+              "retryable": true
+            }
+          }
+        },
+        "502": {
+          "description": "Upstream provider returned an invalid or failed response",
+          "body": {
+            "error": {
+              "code": "UPSTREAM_ERROR",
+              "message": "Upstream provider returned an invalid response.",
+              "details": null,
+              "retryable": true
+            }
+          }
+        },
+        "503": {
+          "description": "Upstream provider unavailable",
+          "body": {
+            "error": {
+              "code": "UPSTREAM_UNAVAILABLE",
+              "message": "Barcode provider is currently unavailable.",
+              "details": null,
+              "retryable": true
+            }
+          }
+        }
+      }
+    }
+  ]
+}
