@@ -135,8 +135,26 @@ At the moment, this repository primarily contains:
 
 The README should be updated as implementation files for the mobile client, backend API, schemas, and matching logic are added.
 
-## Reference Documents
+## Contributing
+
+Before contributing, read:
 
 - `Docs/Architecture_Updated_260417_v13.docx`
 - `Docs/Decision_Log_Updated_260417_v13.docx`
+
+All contributions must follow the architecture and design rules documented there.
+
+### Branching Strategy
+
+This repository uses:
+
+- `main` — protected, release-ready only
+- `develop` — protected, shared integration branch
+
+All work should be done on short-lived feature branches created from `develop`.
+
+Branch naming pattern:
+
+```text
+<workstream>/<issue-number>-<short-name>
 
