@@ -1,0 +1,581 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/nutrition_estimate.json",
+  "title": "Nutrition Estimate API Contract V1",
+  "description": "Contract-first schema for POST /v1/nutrition/estimate request and response.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["endpoint", "method", "request", "responses"],
+  "properties": {
+    "endpoint": {
+      "const": "/v1/nutrition/estimate"
+    },
+    "method": {
+      "const": "POST"
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contentType", "body"],
+      "properties": {
+        "contentType": {
+          "const": "application/json"
+        },
+        "body": {
+          "$ref": "#/$defs/NutritionEstimateRequest"
+        }
+      }
+    },
+    "responses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["200", "400", "404", "422", "429", "500", "503"],
+      "properties": {
+        "200": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["description", "body"],
+          "properties": {
+            "description": {
+              "const": "Successful nutrition estimate"
+            },
+            "body": {
+              "$ref": "#/$defs/NutritionEstimateSuccess"
+            }
+          }
+        },
+        "400": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "404": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "422": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "429": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "500": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "503": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "NutritionEstimateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_type"],
+      "properties": {
+        "input_type": {
+          "type": "string",
+          "enum": ["recognized_dish", "ingredient_set"]
+        },
+        "recognized_dish": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Normalized or candidate dish name when estimating from a recognized meal."
+        },
+        "ingredients": {
+          "type": "array",
+          "description": "Ingredient set used for estimation when no single dish match is available.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "serving_hint": {
+          "type": ["string", "null"],
+          "description": "Optional user or upstream hint about serving size."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "input_type": {
+                "const": "recognized_dish"
+              }
+            },
+            "required": ["input_type"]
+          },
+          "then": {
+            "required": ["recognized_dish"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "input_type": {
+                "const": "ingredient_set"
+              }
+            },
+            "required": ["input_type"]
+          },
+          "then": {
+            "required": ["ingredients"]
+          }
+        }
+      ]
+    },
+    "NutritionEstimateSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "matched_dish",
+        "serving_assumptions",
+        "nutrients",
+        "confidence",
+        "source",
+        "data_quality"
+      ],
+      "properties": {
+        "matched_dish": {
+          "$ref": "#/$defs/MatchedDish"
+        },
+        "serving_assumptions": {
+          "$ref": "#/$defs/ServingAssumptions"
+        },
+        "nutrients": {
+          "$ref": "#/$defs/Nutrients"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Overall backend confidence for the nutrient estimate."
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        },
+        "data_quality": {
+          "$ref": "#/$defs/DataQuality"
+        },
+        "warnings": {
+          "type": "array",
+          "description": "Optional backend warnings about sparse data, assumptions, or fallback behavior.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "MatchedDish": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Backend-selected normalized food or dish match used for nutrient estimation."
+        },
+        "match_type": {
+          "type": "string",
+          "enum": ["dish", "ingredient_set", "food_item"],
+          "description": "Backend classification of the selected match."
+        },
+        "match_id": {
+          "type": ["string", "null"],
+          "description": "Optional backend-internal identifier for the matched dish or food."
+        }
+      }
+    },
+    "ServingAssumptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["basis"],
+      "properties": {
+        "basis": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Serving assumption used for nutrient estimation."
+        },
+        "note": {
+          "type": ["string", "null"],
+          "description": "Optional backend note explaining the serving assumption."
+        }
+      }
+    },
+    "Nutrients": {
+      "type": "object",
+      "description": "Normalized nutrient payload owned by the backend. Required keys are always present, but some values may be null when estimation is partial.",
+      "additionalProperties": false,
+      "required": [
+        "calories_kcal",
+        "protein_g",
+        "carbohydrates_g",
+        "fat_g"
+      ],
+      "properties": {
+        "calories_kcal": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "protein_g": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "carbohydrates_g": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "fat_g": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "fiber_g": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "sugar_g": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "sodium_mg": {
+          "type": ["number", "null"],
+          "minimum": 0
+        }
+      }
+    },
+    "Source": {
+      "type": "object",
+      "description": "Normalized source metadata for the nutrition data selected by the backend.",
+      "additionalProperties": false,
+      "required": ["dataset", "source_type"],
+      "properties": {
+        "dataset": {
+          "type": "string",
+          "enum": [
+            "nutrition_xlsx",
+            "egyptian_food_csv",
+            "fdc_foundation",
+            "fdc_sr_legacy"
+          ]
+        },
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "nutrition_dataset",
+            "egyptian_food_dataset",
+            "fooddata_central"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "dataset": {
+                "const": "nutrition_xlsx"
+              }
+            },
+            "required": ["dataset"]
+          },
+          "then": {
+            "properties": {
+              "source_type": {
+                "const": "nutrition_dataset"
+              }
+            },
+            "required": ["source_type"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "dataset": {
+                "const": "egyptian_food_csv"
+              }
+            },
+            "required": ["dataset"]
+          },
+          "then": {
+            "properties": {
+              "source_type": {
+                "const": "egyptian_food_dataset"
+              }
+            },
+            "required": ["source_type"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "dataset": {
+                "enum": ["fdc_foundation", "fdc_sr_legacy"]
+              }
+            },
+            "required": ["dataset"]
+          },
+          "then": {
+            "properties": {
+              "source_type": {
+                "const": "fooddata_central"
+              }
+            },
+            "required": ["source_type"]
+          }
+        }
+      ]
+    },
+    "DataQuality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completeness"],
+      "properties": {
+        "completeness": {
+          "type": "string",
+          "enum": ["complete", "partial"],
+          "description": "Backend summary of estimate completeness for UI display and warning behavior."
+        }
+      }
+    },
+    "ErrorResponseSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "body"],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "body": {
+          "$ref": "contracts/v1/error_response.json"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "endpoint": "/v1/nutrition/estimate",
+      "method": "POST",
+      "request": {
+        "contentType": "application/json",
+        "body": {
+          "input_type": "recognized_dish",
+          "recognized_dish": "koshari",
+          "serving_hint": "1 bowl"
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful nutrition estimate",
+          "body": {
+            "matched_dish": {
+              "name": "koshari",
+              "match_type": "dish",
+              "match_id": "egy_koshari_001"
+            },
+            "serving_assumptions": {
+              "basis": "1 bowl",
+              "note": "Estimated from normalized dish match and default serving assumption."
+            },
+            "nutrients": {
+              "calories_kcal": 420,
+              "protein_g": 12,
+              "carbohydrates_g": 72,
+              "fat_g": 9,
+              "fiber_g": 8,
+              "sugar_g": 6,
+              "sodium_mg": 540
+            },
+            "confidence": 0.84,
+            "source": {
+              "dataset": "egyptian_food_csv",
+              "source_type": "egyptian_food_dataset"
+            },
+            "data_quality": {
+              "completeness": "complete"
+            },
+            "warnings": []
+          }
+        },
+        "400": {
+          "description": "Malformed request or unsupported estimate input",
+          "body": {
+            "error": {
+              "code": "BAD_REQUEST",
+              "message": "Request is missing the required estimate input.",
+              "retryable": false,
+              "request_id": "req_20001"
+            }
+          }
+        },
+        "404": {
+          "description": "No matching dish or ingredient data found",
+          "body": {
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "No matching dish or ingredient data found for the supplied estimate input.",
+              "retryable": false,
+              "request_id": "req_20006"
+            }
+          }
+        },
+        "422": {
+          "description": "Request validation failed",
+          "body": {
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "Request body failed schema validation.",
+              "retryable": false,
+              "request_id": "req_20002"
+            }
+          }
+        },
+        "429": {
+          "description": "Rate limit exceeded",
+          "body": {
+            "error": {
+              "code": "RATE_LIMITED",
+              "message": "Too many requests. Try again later.",
+              "retryable": true,
+              "request_id": "req_20003"
+            }
+          }
+        },
+        "500": {
+          "description": "Unexpected internal failure",
+          "body": {
+            "error": {
+              "code": "INTERNAL_ERROR",
+              "message": "Unexpected server error.",
+              "retryable": true,
+              "request_id": "req_20004"
+            }
+          }
+        },
+        "503": {
+          "description": "Nutrition estimation source unavailable",
+          "body": {
+            "error": {
+              "code": "UPSTREAM_UNAVAILABLE",
+              "message": "Nutrition estimation source is currently unavailable.",
+              "retryable": true,
+              "request_id": "req_20005"
+            }
+          }
+        }
+      }
+    },
+    {
+      "endpoint": "/v1/nutrition/estimate",
+      "method": "POST",
+      "request": {
+        "contentType": "application/json",
+        "body": {
+          "input_type": "ingredient_set",
+          "ingredients": ["rice", "lentils", "tomato sauce"],
+          "serving_hint": "1 plate"
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful nutrition estimate",
+          "body": {
+            "matched_dish": {
+              "name": "koshari",
+              "match_type": "ingredient_set",
+              "match_id": null
+            },
+            "serving_assumptions": {
+              "basis": "1 plate",
+              "note": "Estimated from ingredient-set matching and default serving assumption."
+            },
+            "nutrients": {
+              "calories_kcal": 390,
+              "protein_g": 11,
+              "carbohydrates_g": 68,
+              "fat_g": 7,
+              "fiber_g": 7,
+              "sugar_g": 5,
+              "sodium_mg": null
+            },
+            "confidence": 0.71,
+            "source": {
+              "dataset": "nutrition_xlsx",
+              "source_type": "nutrition_dataset"
+            },
+            "data_quality": {
+              "completeness": "partial"
+            },
+            "warnings": [
+              "Sodium estimate unavailable for one or more matched ingredients."
+            ]
+          }
+        },
+        "400": {
+          "description": "Malformed request or unsupported estimate input",
+          "body": {
+            "error": {
+              "code": "BAD_REQUEST",
+              "message": "Request is missing the required estimate input.",
+              "retryable": false,
+              "request_id": "req_20011"
+            }
+          }
+        },
+        "404": {
+          "description": "No matching dish or ingredient data found",
+          "body": {
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "No matching dish or ingredient data found for the supplied estimate input.",
+              "retryable": false,
+              "request_id": "req_20012"
+            }
+          }
+        },
+        "422": {
+          "description": "Request validation failed",
+          "body": {
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "Request body failed schema validation.",
+              "retryable": false,
+              "request_id": "req_20013"
+            }
+          }
+        },
+        "429": {
+          "description": "Rate limit exceeded",
+          "body": {
+            "error": {
+              "code": "RATE_LIMITED",
+              "message": "Too many requests. Try again later.",
+              "retryable": true,
+              "request_id": "req_20014"
+            }
+          }
+        },
+        "500": {
+          "description": "Unexpected internal failure",
+          "body": {
+            "error": {
+              "code": "INTERNAL_ERROR",
+              "message": "Unexpected server error.",
+              "retryable": true,
+              "request_id": "req_20015"
+            }
+          }
+        },
+        "503": {
+          "description": "Nutrition estimation source unavailable",
+          "body": {
+            "error": {
+              "code": "UPSTREAM_UNAVAILABLE",
+              "message": "Nutrition estimation source is currently unavailable.",
+              "retryable": true,
+              "request_id": "req_20016"
+            }
+          }
+        }
+      }
+    }
+  ]
+}
