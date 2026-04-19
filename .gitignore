@@ -1,3 +1,5 @@
 *.json
+!contracts/
+!contracts/*.json
 .docx_work/
 Environment/.env
