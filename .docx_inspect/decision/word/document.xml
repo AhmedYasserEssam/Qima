@@ -1,0 +1,3640 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes'?>
+<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:mo="http://schemas.microsoft.com/office/mac/office/2008/main" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:mv="urn:schemas-microsoft-com:mac:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" mc:Ignorable="w14 wp14">
+<w:body>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="SmallCaps"/>
+<w:jc w:val="left"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+</w:rPr>
+<w:t>NutriAI / Qima</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:jc w:val="left"/>
+<w:keepNext/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="44"/>
+</w:rPr>
+<w:t>Updated Design Decision Log</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:r>
+<w:rPr>
+<w:i/>
+<w:color w:val="5B6B6C"/>
+<w:sz w:val="22"/>
+</w:rPr>
+<w:t>Working record of confirmed, tentative, and open product and architecture decisions after the latest recipe-layer update.</w:t>
+</w:r>
+</w:p>
+<w:tbl>
+<w:tblPr>
+<w:tblW w:type="auto" w:w="0"/>
+<w:jc w:val="left"/>
+<w:tblLayout w:type="fixed"/>
+<w:tblLook w:firstColumn="1" w:firstRow="1" w:lastColumn="0" w:lastRow="0" w:noHBand="0" w:noVBand="1" w:val="04A0"/>
+</w:tblPr>
+<w:tblGrid>
+<w:gridCol w:w="3360"/>
+<w:gridCol w:w="3360"/>
+<w:gridCol w:w="3360"/>
+</w:tblGrid>
+<w:tr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2160"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="70" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="70" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="EAF4F2"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Version</w:t>
+<w:br/>
+<w:t>1.3</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2232"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="70" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="70" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="EAF4F2"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Prepared on</w:t>
+<w:br/>
+<w:t>17 April 2026</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3888"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="70" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="70" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="EAF4F2"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Status</w:t>
+<w:br/>
+<w:t>Execution baseline - updated</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2160"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="70" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="70" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Supersedes</w:t>
+<w:br/>
+<w:t>Version 1.2</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2232"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="70" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="70" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="17"/>
+</w:rPr>
+<w:t>Scope</w:t>
+<w:br/>
+</w:r>
+<w:r>
+<w:rPr>
+<w:color w:val="333333"/>
+<w:sz w:val="19"/>
+</w:rPr>
+<w:t>Architecture / design alignment</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3888"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="70" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="70" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="17"/>
+</w:rPr>
+<w:t>Audience</w:t>
+<w:br/>
+</w:r>
+<w:r>
+<w:rPr>
+<w:color w:val="333333"/>
+<w:sz w:val="19"/>
+</w:rPr>
+<w:t>Project team</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+</w:tbl>
+<w:p/>
+<w:tbl>
+<w:tblPr>
+<w:tblW w:type="auto" w:w="0"/>
+<w:jc w:val="left"/>
+<w:tblLayout w:type="fixed"/>
+<w:tblLook w:firstColumn="1" w:firstRow="1" w:lastColumn="0" w:lastRow="0" w:noHBand="0" w:noVBand="1" w:val="04A0"/>
+</w:tblPr>
+<w:tblGrid>
+<w:gridCol w:w="10080"/>
+</w:tblGrid>
+<w:tr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="9792"/>
+<w:shd w:fill="EAF4F2"/>
+<w:tcMar>
+<w:top w:w="80" w:type="dxa"/>
+<w:start w:w="130" w:type="dxa"/>
+<w:bottom w:w="80" w:type="dxa"/>
+<w:end w:w="130" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>This revision keeps all previously locked stack choices and adds three explicit decisions from the latest project discussion: Groq llama-3.1-8b-instant is the main conversational LLM, the recipe layer is locked to retrieval-first grounded summary/light adaptation rather than default free-form generation, and Google Gemini 2.5 Flash is the stable multimodal vision model for the no-barcode flow.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+</w:tbl>
+<w:p/>
+<w:p>
+<w:pPr>
+<w:keepNext/>
+<w:pBdr>
+<w:bottom w:val="single" w:sz="8" w:space="2" w:color="B7D7D1"/>
+</w:pBdr>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="26"/>
+</w:rPr>
+<w:t>1. Decision register</w:t>
+</w:r>
+</w:p>
+<w:tbl>
+<w:tblPr>
+<w:tblW w:type="auto" w:w="0"/>
+<w:jc w:val="left"/>
+<w:tblLayout w:type="fixed"/>
+<w:tblLook w:firstColumn="1" w:firstRow="1" w:lastColumn="0" w:lastRow="0" w:noHBand="0" w:noVBand="1" w:val="04A0"/>
+</w:tblPr>
+<w:tblGrid>
+<w:gridCol w:w="1680"/>
+<w:gridCol w:w="1680"/>
+<w:gridCol w:w="1680"/>
+<w:gridCol w:w="1680"/>
+<w:gridCol w:w="1680"/>
+<w:gridCol w:w="1680"/>
+</w:tblGrid>
+<w:tr>
+<w:trPr>
+<w:tblHeader w:val="true"/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="D7ECE7"/>
+</w:tcPr>
+<w:p>
+<w:pPr>
+<w:jc w:val="left"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="17"/>
+</w:rPr>
+<w:t>ID</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="D7ECE7"/>
+</w:tcPr>
+<w:p>
+<w:pPr>
+<w:jc w:val="left"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="17"/>
+</w:rPr>
+<w:t>Area</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="D7ECE7"/>
+</w:tcPr>
+<w:p>
+<w:pPr>
+<w:jc w:val="center"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="17"/>
+</w:rPr>
+<w:t>Decision</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="D7ECE7"/>
+</w:tcPr>
+<w:p>
+<w:pPr>
+<w:jc w:val="center"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="17"/>
+</w:rPr>
+<w:t>Status</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="D7ECE7"/>
+</w:tcPr>
+<w:p>
+<w:pPr>
+<w:jc w:val="center"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="17"/>
+</w:rPr>
+<w:t>Rationale / note</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="D7ECE7"/>
+</w:tcPr>
+<w:p>
+<w:pPr>
+<w:jc w:val="center"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="17"/>
+</w:rPr>
+<w:t>Owner</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-01</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Nutrition data</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Use nutrition.xlsx as the primary food nutrient dataset, Egyptian Food.csv for Egyptian foods, and FoodData Central as fallback</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>This gives the backend a simple primary lookup, localized Egyptian coverage, and broader fallback coverage; Egyptian Food.csv still requires schema, unit, provenance, and licensing validation.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Backend</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-02</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Barcode lookup</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Use Open Food Facts API as packaged-food barcode source</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Primary packaged-food lookup path.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Backend</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-03</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Vision fallback</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Use Google Gemini 2.5 Flash for foods with no barcode</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Stable multimodal model locked; backend-owned structured JSON output contract required.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>CV</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-04</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Product architecture</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Retain mobile app + backend API + tool-using AI layer</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Remains the baseline system shape.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>PM</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-05</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Delivery model</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Keep 12-week MVP with contract-first, parallel execution</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>No schedule reset approved.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>PM</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-06</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>API strategy</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Use contract-first APIs and stub-driven development</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Still required to avoid cross-team blocking.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>PM/BE</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-07</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Recipe agent</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Use retrieval-first recipe assistance with grounded summary/light adaptation only</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Option B locked; default free-form recipe generation not part of the current baseline.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Backend</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-08</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Conversational LLM</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Use Groq llama-3.1-8b-instant as the main conversational LLM</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Selected for low cost, speed, and acceptable MVP capacity.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>NLP/RAG</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-09</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Mobile framework</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Lock mobile client to Flutter</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Tentative state removed in the prior revision.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Mobile</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-10</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Nutrition grounding</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Prefer retrieved structured data over model recall for nutrition answers</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Needed to reduce hallucination risk.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>NLP/RAG</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-11</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Medical boundary</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>System must not present medical advice as diagnosis or treatment</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Hard product boundary stays in force.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>PM</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-12</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Market focus</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Egyptian food support is a first-class requirement</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Localization is now core scope, not a later enhancement.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>PM</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-13</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Backend framework</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Lock backend API to Python + FastAPI</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Framework choice now explicit rather than implied.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Backend</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-14</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Integration boundary</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Flutter calls FastAPI only; no direct third-party API calls from the app</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Protects secrets and centralizes normalization, caching, and vendor logic.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Backend/Mobile</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-15</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Secrets policy</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>API keys and provider credentials remain backend-only</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>No secrets embedded in mobile builds.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Backend</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-16</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Recipe dataset scope</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Use the recipe dataset only inside the recipe layer</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Dataset supports recipe retrieval, candidate ranking, grounded recipe assistance, and recipe discussion. It is not used in lookup or as a replacement nutrition source.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Backend/NLP</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-17</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Recipe interaction pattern</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Adopt retrieval-first recipe assistance</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>The system should retrieve grounded recipe candidates before any optional adaptation step.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Backend</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="864"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-18</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1368"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Recipe discussion grounding</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2664"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Recipe discussion must use retrieved recipe context</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3456"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Follow-up recipe answers should rely on retrieved recipe rows and structured match context, not free-form model recall.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>NLP/RAG</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1680"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-19</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1680"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Recipe adaptation provider</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1680"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Use Groq llama-3.1-8b-instant for recipe summary/light adaptation</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1680"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1680"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Keeps one provider path for conversational Q&amp;A and recipe adaptation.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1680"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Backend/NLP</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1680"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>DD-20</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1680"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Vision output contract</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1680"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Normalize Gemini vision output into a backend-defined structured JSON schema</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1680"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Confirmed</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1680"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Prevents upstream response drift from leaking into mobile or nutrition-estimation logic.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1680"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Backend/CV</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+</w:tbl>
+<w:p/>
+<w:p>
+<w:pPr>
+<w:keepNext/>
+<w:pBdr>
+<w:bottom w:val="single" w:sz="8" w:space="2" w:color="B7D7D1"/>
+</w:pBdr>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="26"/>
+</w:rPr>
+<w:t>2. Controlled wording corrections</w:t>
+</w:r>
+</w:p>
+<w:tbl>
+<w:tblPr>
+<w:tblW w:type="auto" w:w="0"/>
+<w:jc w:val="left"/>
+<w:tblLayout w:type="fixed"/>
+<w:tblLook w:firstColumn="1" w:firstRow="1" w:lastColumn="0" w:lastRow="0" w:noHBand="0" w:noVBand="1" w:val="04A0"/>
+</w:tblPr>
+<w:tblGrid>
+<w:gridCol w:w="5040"/>
+<w:gridCol w:w="5040"/>
+</w:tblGrid>
+<w:tr>
+<w:trPr>
+<w:tblHeader w:val="true"/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2592"/>
+<w:vAlign w:val="center"/>
+<w:shd w:fill="D7ECE7"/>
+<w:tcMar>
+<w:top w:w="80" w:type="dxa"/>
+<w:start w:w="120" w:type="dxa"/>
+<w:bottom w:w="80" w:type="dxa"/>
+<w:end w:w="120" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="18"/>
+</w:rPr>
+<w:t>Topic</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="6912"/>
+<w:vAlign w:val="center"/>
+<w:shd w:fill="D7ECE7"/>
+<w:tcMar>
+<w:top w:w="80" w:type="dxa"/>
+<w:start w:w="120" w:type="dxa"/>
+<w:bottom w:w="80" w:type="dxa"/>
+<w:end w:w="120" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="18"/>
+</w:rPr>
+<w:t>Current controlled wording / action</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2592"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="90" w:type="dxa"/>
+<w:start w:w="120" w:type="dxa"/>
+<w:bottom w:w="90" w:type="dxa"/>
+<w:end w:w="120" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F4F8F8"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Food API naming</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="6912"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="90" w:type="dxa"/>
+<w:start w:w="120" w:type="dxa"/>
+<w:bottom w:w="90" w:type="dxa"/>
+<w:end w:w="120" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Use "Open Food Facts API" rather than older variants.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2592"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="90" w:type="dxa"/>
+<w:start w:w="120" w:type="dxa"/>
+<w:bottom w:w="90" w:type="dxa"/>
+<w:end w:w="120" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F4F8F8"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Vision model naming</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="6912"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="90" w:type="dxa"/>
+<w:start w:w="120" w:type="dxa"/>
+<w:bottom w:w="90" w:type="dxa"/>
+<w:end w:w="120" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Use "Google Gemini 2.5 Flash" or API model id `gemini-2.5-flash`.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2592"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="90" w:type="dxa"/>
+<w:start w:w="120" w:type="dxa"/>
+<w:bottom w:w="90" w:type="dxa"/>
+<w:end w:w="120" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F4F8F8"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Backend stack wording</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="6912"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="90" w:type="dxa"/>
+<w:start w:w="120" w:type="dxa"/>
+<w:bottom w:w="90" w:type="dxa"/>
+<w:end w:w="120" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Use "Python + FastAPI backend" everywhere.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2592"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="90" w:type="dxa"/>
+<w:start w:w="120" w:type="dxa"/>
+<w:bottom w:w="90" w:type="dxa"/>
+<w:end w:w="120" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F4F8F8"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Mobile integration wording</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="6912"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="90" w:type="dxa"/>
+<w:start w:w="120" w:type="dxa"/>
+<w:bottom w:w="90" w:type="dxa"/>
+<w:end w:w="120" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Use "Flutter calls backend only" everywhere.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2592"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="90" w:type="dxa"/>
+<w:start w:w="120" w:type="dxa"/>
+<w:bottom w:w="90" w:type="dxa"/>
+<w:end w:w="120" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F4F8F8"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Recipe dataset wording</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="6912"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="90" w:type="dxa"/>
+<w:start w:w="120" w:type="dxa"/>
+<w:bottom w:w="90" w:type="dxa"/>
+<w:end w:w="120" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Use "recipe corpus" or "recipe dataset inside the recipe layer", not "lookup database".</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2592"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="90" w:type="dxa"/>
+<w:start w:w="120" w:type="dxa"/>
+<w:bottom w:w="90" w:type="dxa"/>
+<w:end w:w="120" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F4F8F8"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Recipe generation wording</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="6912"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="90" w:type="dxa"/>
+<w:start w:w="120" w:type="dxa"/>
+<w:bottom w:w="90" w:type="dxa"/>
+<w:end w:w="120" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Use "retrieval-first grounded recipe assistance with summary/light adaptation"; do not describe the current system as free-form recipe generation.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="5040"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Conversational model wording</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="5040"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Use "Groq llama-3.1-8b-instant" as the locked conversational LLM.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+</w:tbl>
+<w:p/>
+<w:p>
+<w:pPr>
+<w:keepNext/>
+<w:pBdr>
+<w:bottom w:val="single" w:sz="8" w:space="2" w:color="B7D7D1"/>
+</w:pBdr>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="26"/>
+</w:rPr>
+<w:t>3. Design implications</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r>
+<w:t>• The backend must expose stable mobile-facing contracts even if upstream providers change.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r>
+<w:t>• Barcode and non-barcode flows should remain separate internally because their confidence and failure modes differ.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r>
+<w:t>• Gemini outputs should use a structured JSON contract with dish candidates, ingredients, confidence, and source fields.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r>
+<w:t>• Prompting and safety rules should now be written against the locked providers: Groq llama-3.1-8b-instant for conversational and recipe adaptation, and Gemini 2.5 Flash for vision.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r>
+<w:t>• The nutrition layer must reconcile packaged products and local meal estimates through one normalized schema and a backend-owned source hierarchy: nutrition.xlsx first, Egyptian Food.csv for Egyptian foods, then FoodData Central fallback.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r>
+<w:t>• The recipe layer must keep recipe retrieval, candidate ranking, missing-ingredient logic, and recipe discussion grounded in the recipe corpus.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r>
+<w:t>• Recipe discussion should explain why a recipe was suggested, what ingredients are missing, and how the candidate could be adapted without inventing a substantially new recipe by default.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:keepNext/>
+<w:pBdr>
+<w:bottom w:val="single" w:sz="8" w:space="2" w:color="B7D7D1"/>
+</w:pBdr>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="26"/>
+</w:rPr>
+<w:t>4. Highest-priority open decisions</w:t>
+</w:r>
+</w:p>
+<w:tbl>
+<w:tblPr>
+<w:tblW w:type="auto" w:w="0"/>
+<w:jc w:val="left"/>
+<w:tblLayout w:type="fixed"/>
+<w:tblLook w:firstColumn="1" w:firstRow="1" w:lastColumn="0" w:lastRow="0" w:noHBand="0" w:noVBand="1" w:val="04A0"/>
+</w:tblPr>
+<w:tblGrid>
+<w:gridCol w:w="2016"/>
+<w:gridCol w:w="2016"/>
+<w:gridCol w:w="2016"/>
+<w:gridCol w:w="2016"/>
+<w:gridCol w:w="2016"/>
+</w:tblGrid>
+<w:tr>
+<w:trPr>
+<w:tblHeader w:val="true"/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="D7ECE7"/>
+</w:tcPr>
+<w:p>
+<w:pPr>
+<w:jc w:val="left"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="17"/>
+</w:rPr>
+<w:t>ID</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2016"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="D7ECE7"/>
+</w:tcPr>
+<w:p>
+<w:pPr>
+<w:jc w:val="left"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="17"/>
+</w:rPr>
+<w:t>Decision</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3312"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="D7ECE7"/>
+</w:tcPr>
+<w:p>
+<w:pPr>
+<w:jc w:val="center"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="17"/>
+</w:rPr>
+<w:t>Missing detail</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="D7ECE7"/>
+</w:tcPr>
+<w:p>
+<w:pPr>
+<w:jc w:val="center"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="17"/>
+</w:rPr>
+<w:t>Priority</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2304"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="D7ECE7"/>
+</w:tcPr>
+<w:p>
+<w:pPr>
+<w:jc w:val="center"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="17"/>
+</w:rPr>
+<w:t>Why it matters</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>OD-01</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2016"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Dataset validation</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3312"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Schema audit, unit consistency, provenance, and license review for Egyptian Food.csv, plus documented matching rules between nutrition.xlsx and FoodData Central fallback</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>High</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2304"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Egyptian Food.csv cannot be treated as trusted without this, and the primary-to-fallback matching order must be documented before production rollout.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>OD-02</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2016"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Recipe corpus preprocessing</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3312"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Canonical ingredient vocabulary, deduplication, dietary tags, and allergen/exclusion handling</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>High</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2304"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Affects recipe quality, grounding quality, and discussion reliability.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>OD-03</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2016"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Authentication strategy</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3312"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Email/password vs OAuth vs guest mode, unless already decided elsewhere and not logged</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Medium</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2304"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t>Still affects backend scope and mobile onboarding flow if unresolved.</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r/>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2016"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r/>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3312"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r/>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r/>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2304"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r/>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:cantSplit/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1008"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+<w:shd w:fill="F7FAFA"/>
+</w:tcPr>
+<w:p>
+<w:r/>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2016"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r/>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3312"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r/>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="1152"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r/>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="2304"/>
+<w:vAlign w:val="center"/>
+<w:tcMar>
+<w:top w:w="85" w:type="dxa"/>
+<w:start w:w="110" w:type="dxa"/>
+<w:bottom w:w="85" w:type="dxa"/>
+<w:end w:w="110" w:type="dxa"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r/>
+</w:p>
+</w:tc>
+</w:tr>
+</w:tbl>
+<w:p/>
+<w:p>
+<w:pPr>
+<w:keepNext/>
+<w:pBdr>
+<w:bottom w:val="single" w:sz="8" w:space="2" w:color="B7D7D1"/>
+</w:pBdr>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="26"/>
+</w:rPr>
+<w:t>5. Immediate document updates required</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r>
+<w:t>• Revise the PRD and sprint documents so they explicitly state Groq llama-3.1-8b-instant as the conversational LLM and recipe-adaptation model.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r>
+<w:t>• Update the CV/API contracts to state Google Gemini 2.5 Flash as the locked multimodal vision model and to enforce a backend-defined JSON response schema.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r>
+<w:t>• Document the backend-only integration rule in mobile and backend deliverables to prevent direct provider calls from the app.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r>
+<w:t>• Add a formal dataset validation note before Egyptian Food.csv is treated as authoritative, and document nutrition.xlsx as the primary food nutrient source with FoodData Central as fallback.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r>
+<w:t>• Finalize recipe corpus preprocessing standards: canonical ingredient vocabulary, deduplication, dietary tags, and exclusion handling.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r>
+<w:t>• Document the recipe layer as retrieval-first grounded assistance with summary/light adaptation only; no default free-form recipe generation.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r/>
+</w:p>
+<w:p>
+<w:pPr>
+<w:keepNext/>
+<w:pBdr>
+<w:bottom w:val="single" w:sz="8" w:space="2" w:color="B7D7D1"/>
+</w:pBdr>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:color w:val="1F4E46"/>
+<w:sz w:val="26"/>
+</w:rPr>
+<w:t>6. Source basis for this revision</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r>
+<w:t>• Prior workflow plan and proposal artifacts.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r>
+<w:t>• Previous architecture baseline and decision log.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r>
+<w:t>• Latest team discussion locking Groq llama-3.1-8b-instant for conversational Q&amp;A and recipe adaptation.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="288" w:hanging="216"/>
+</w:pPr>
+<w:r>
+<w:t>• Latest team discussion locking Option B for the recipe layer: retrieval-first grounded summary/light adaptation.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:r>
+<w:t>• Latest team discussion locking Google Gemini 2.5 Flash for the no-barcode vision flow.</w:t>
+</w:r>
+</w:p>
+<w:sectPr w:rsidR="00FC693F" w:rsidRPr="0006063C" w:rsidSect="00034616">
+<w:footerReference w:type="default" r:id="rId9"/>
+<w:pgSz w:w="12240" w:h="15840"/>
+<w:pgMar w:top="1152" w:right="1080" w:bottom="1008" w:left="1080" w:header="720" w:footer="720" w:gutter="0"/>
+<w:cols w:space="720"/>
+<w:docGrid w:linePitch="360"/>
+</w:sectPr>
+</w:body>
+</w:document>
