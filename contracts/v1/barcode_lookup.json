@@ -1,14 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://qima.local/contracts/barcode_lookup.json",
-  "title": "Barcode Lookup API Contract",
-  "description": "Contract-first schema for POST /barcode/lookup request and response.",
+  "$id": "contracts/v1/barcode_lookup.json",
+  "title": "Barcode Lookup API Contract V1",
+  "description": "Contract-first schema for POST /v1/barcode/lookup request and response.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["endpoint", "method", "request", "responses"],
+  "required": [
+    "endpoint",
+    "method",
+    "request",
+    "responses"
+  ],
   "properties": {
     "endpoint": {
-      "const": "/barcode/lookup"
+      "const": "/v1/barcode/lookup"
     },
     "method": {
       "const": "POST"
@@ -16,7 +21,10 @@
     "request": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["contentType", "body"],
+      "required": [
+        "contentType",
+        "body"
+      ],
       "properties": {
         "contentType": {
           "const": "application/json"
@@ -29,12 +37,23 @@
     "responses": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["200", "400", "404", "422", "429", "500", "502", "503"],
+      "required": [
+        "200",
+        "400",
+        "404",
+        "422",
+        "429",
+        "500",
+        "503"
+      ],
       "properties": {
         "200": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["description", "body"],
+          "required": [
+            "description",
+            "body"
+          ],
           "properties": {
             "description": {
               "const": "Successful barcode lookup"
@@ -59,9 +78,6 @@
         "500": {
           "$ref": "#/$defs/ErrorResponseSpec"
         },
-        "502": {
-          "$ref": "#/$defs/ErrorResponseSpec"
-        },
         "503": {
           "$ref": "#/$defs/ErrorResponseSpec"
         }
@@ -72,13 +88,14 @@
     "BarcodeLookupRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["barcode"],
+      "required": [
+        "barcode"
+      ],
       "properties": {
         "barcode": {
           "type": "string",
-          "description": "Scanned barcode as digits only.",
           "pattern": "^[0-9]{8,14}$",
-          "examples": ["5449000000996"]
+          "description": "Scanned barcode as digits only. Supports common retail barcode lengths used in MVP packaged-food flows, including 8 to 14 digits."
         }
       }
     },
@@ -88,92 +105,135 @@
       "required": [
         "product_id",
         "name",
-        "brand",
         "nutrition",
         "ingredients",
         "allergens",
-        "source"
+        "source",
+        "data_quality"
       ],
       "properties": {
         "product_id": {
           "type": "string",
           "minLength": 1,
-          "description": "Canonical backend product identifier. For MVP this may be the barcode itself or a normalized source-backed ID.",
-          "examples": ["off:5449000000996"]
+          "description": "Canonical backend product identifier."
         },
         "name": {
           "type": "string",
-          "minLength": 1,
-          "examples": ["Coca-Cola Original Taste"]
+          "minLength": 1
         },
         "brand": {
-          "type": "string",
-          "minLength": 1,
-          "examples": ["Coca-Cola"]
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Brand name if available from upstream data; null when unavailable."
         },
         "nutrition": {
           "$ref": "#/$defs/Nutrition"
         },
         "ingredients": {
           "type": "array",
-          "description": "Normalized ingredient list in display order.",
+          "description": "Normalized ingredient list in display order. Empty means unavailable after normalization.",
           "items": {
             "$ref": "#/$defs/Ingredient"
           }
         },
         "allergens": {
           "type": "array",
-          "description": "Normalized allergen detections derived from source product data.",
+          "description": "Normalized allergen detections derived from source product data. Empty does not guarantee allergen-free status.",
           "items": {
             "$ref": "#/$defs/Allergen"
           }
         },
         "source": {
           "$ref": "#/$defs/Source"
+        },
+        "data_quality": {
+          "$ref": "#/$defs/DataQuality"
         }
       }
     },
     "Nutrition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["basis", "serving_size", "values"],
+      "required": [
+        "basis",
+        "serving_size",
+        "values"
+      ],
       "properties": {
         "basis": {
           "type": "string",
-          "enum": ["per_100g", "per_100ml", "per_serving"]
+          "enum": [
+            "per_100g",
+            "per_100ml",
+            "per_serving"
+          ]
         },
         "serving_size": {
-          "type": ["string", "null"],
-          "examples": ["330 ml", null]
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Human-readable serving size if available."
         },
         "values": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["energy_kcal", "protein_g", "carbohydrates_g", "fat_g"],
+          "required": [
+            "energy_kcal",
+            "protein_g",
+            "carbohydrates_g",
+            "fat_g"
+          ],
           "properties": {
             "energy_kcal": {
-              "type": ["number", "null"]
+              "type": [
+                "number",
+                "null"
+              ]
             },
             "protein_g": {
-              "type": ["number", "null"]
+              "type": [
+                "number",
+                "null"
+              ]
             },
             "carbohydrates_g": {
-              "type": ["number", "null"]
+              "type": [
+                "number",
+                "null"
+              ]
             },
             "fat_g": {
-              "type": ["number", "null"]
+              "type": [
+                "number",
+                "null"
+              ]
             },
             "sugars_g": {
-              "type": ["number", "null"]
+              "type": [
+                "number",
+                "null"
+              ]
             },
             "fiber_g": {
-              "type": ["number", "null"]
+              "type": [
+                "number",
+                "null"
+              ]
             },
             "sodium_mg": {
-              "type": ["number", "null"]
+              "type": [
+                "number",
+                "null"
+              ]
             },
             "salt_g": {
-              "type": ["number", "null"]
+              "type": [
+                "number",
+                "null"
+              ]
             }
           }
         }
@@ -182,7 +242,11 @@
     "Ingredient": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["text", "normalized_text", "is_allergen"],
+      "required": [
+        "text",
+        "normalized_text",
+        "is_allergen"
+      ],
       "properties": {
         "text": {
           "type": "string",
@@ -200,16 +264,23 @@
     "Allergen": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "severity", "source_text"],
+      "required": [
+        "name",
+        "severity",
+        "source_text"
+      ],
       "properties": {
         "name": {
           "type": "string",
-          "minLength": 1,
-          "examples": ["milk"]
+          "minLength": 1
         },
         "severity": {
           "type": "string",
-          "enum": ["contains", "may_contain", "unknown"]
+          "enum": [
+            "contains",
+            "may_contain",
+            "unknown"
+          ]
         },
         "source_text": {
           "type": "string",
@@ -220,16 +291,22 @@
     "Source": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["provider", "provider_product_id", "fetched_at"],
+      "required": [
+        "provider",
+        "provider_product_id",
+        "fetched_at"
+      ],
       "properties": {
         "provider": {
           "type": "string",
-          "const": "Open Food Facts API"
+          "enum": [
+            "open_food_facts"
+          ],
+          "description": "Upstream packaged-food provider."
         },
         "provider_product_id": {
           "type": "string",
-          "minLength": 1,
-          "examples": ["5449000000996"]
+          "minLength": 1
         },
         "fetched_at": {
           "type": "string",
@@ -237,60 +314,43 @@
         }
       }
     },
+    "DataQuality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "completeness"
+      ],
+      "properties": {
+        "completeness": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "partial"
+          ],
+          "description": "Backend summary of response completeness for UI warning and display behavior."
+        }
+      }
+    },
     "ErrorResponseSpec": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["description", "body"],
+      "required": [
+        "description",
+        "body"
+      ],
       "properties": {
         "description": {
           "type": "string"
         },
         "body": {
-          "$ref": "#/$defs/ErrorEnvelope"
-        }
-      }
-    },
-    "ErrorEnvelope": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["error"],
-      "properties": {
-        "error": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["code", "message"],
-          "properties": {
-            "code": {
-              "type": "string",
-              "enum": [
-                "INVALID_BARCODE",
-                "BAD_REQUEST",
-                "PRODUCT_NOT_FOUND",
-                "VALIDATION_ERROR",
-                "RATE_LIMITED",
-                "UPSTREAM_UNAVAILABLE",
-                "UPSTREAM_ERROR",
-                "INTERNAL_ERROR"
-              ]
-            },
-            "message": {
-              "type": "string",
-              "minLength": 1
-            },
-            "details": {
-              "type": ["object", "array", "string", "null"]
-            },
-            "retryable": {
-              "type": "boolean"
-            }
-          }
+          "$ref": "contracts/v1/error_response.json"
         }
       }
     }
   },
   "examples": [
     {
-      "endpoint": "/barcode/lookup",
+      "endpoint": "/v1/barcode/lookup",
       "method": "POST",
       "request": {
         "contentType": "application/json",
@@ -333,9 +393,12 @@
             ],
             "allergens": [],
             "source": {
-              "provider": "Open Food Facts API",
+              "provider": "open_food_facts",
               "provider_product_id": "5449000000996",
               "fetched_at": "2026-04-19T20:00:00Z"
+            },
+            "data_quality": {
+              "completeness": "complete"
             }
           }
         },
@@ -346,7 +409,8 @@
               "code": "BAD_REQUEST",
               "message": "barcode must contain 8 to 14 digits",
               "retryable": false,
-              "request_id": "req_12345"
+              "request_id": "req_12345",
+              "details": null
             }
           }
         },
@@ -354,12 +418,13 @@
           "description": "No product found for barcode",
           "body": {
             "error": {
-              "code": "PRODUCT_NOT_FOUND",
+              "code": "NOT_FOUND",
               "message": "No product found for the supplied barcode.",
+              "retryable": false,
+              "request_id": "req_12346",
               "details": {
                 "barcode": "0000000000000"
-              },
-              "retryable": false
+              }
             }
           }
         },
@@ -369,8 +434,9 @@
             "error": {
               "code": "VALIDATION_ERROR",
               "message": "Request body failed schema validation.",
-              "details": null,
-              "retryable": false
+              "retryable": false,
+              "request_id": "req_12347",
+              "details": null
             }
           }
         },
@@ -380,8 +446,9 @@
             "error": {
               "code": "RATE_LIMITED",
               "message": "Too many requests. Try again later.",
-              "details": null,
-              "retryable": true
+              "retryable": true,
+              "request_id": "req_12348",
+              "details": null
             }
           }
         },
@@ -391,19 +458,9 @@
             "error": {
               "code": "INTERNAL_ERROR",
               "message": "Unexpected server error.",
-              "details": null,
-              "retryable": true
-            }
-          }
-        },
-        "502": {
-          "description": "Upstream provider returned an invalid or failed response",
-          "body": {
-            "error": {
-              "code": "UPSTREAM_ERROR",
-              "message": "Upstream provider returned an invalid response.",
-              "details": null,
-              "retryable": true
+              "retryable": true,
+              "request_id": "req_12349",
+              "details": null
             }
           }
         },
@@ -413,8 +470,9 @@
             "error": {
               "code": "UPSTREAM_UNAVAILABLE",
               "message": "Barcode provider is currently unavailable.",
-              "details": null,
-              "retryable": true
+              "retryable": true,
+              "request_id": "req_12350",
+              "details": null
             }
           }
         }
