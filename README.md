@@ -76,7 +76,7 @@ In practice:
 
 Planned backend contract includes:
 
-- `/nutrition/estimate`
+- `/v1/nutrition/estimate`
 
 Expected output shape includes:
 
