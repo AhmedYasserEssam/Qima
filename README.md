@@ -18,7 +18,7 @@ The system is intended to help users:
 
 ## Architecture Overview
 
-The current architecture described in `Docs/Architecture_Updated_260417_v13.docx` is:
+The current architecture described in `Docs/Architecture_Updated_260422_v14.docx` is:
 
 - `Flutter` mobile client
   - camera, barcode scan, UI, session state, API calls
@@ -34,6 +34,10 @@ The current architecture described in `Docs/Architecture_Updated_260417_v13.docx
   - primary, localized, and fallback nutrition sources
 - recipe corpus
   - retrieval-first recipe suggestions and grounded recipe discussion
+- budget-aware meal planning layer
+  - Egyptian ingredient price awareness, estimated recipe cost, and price-aware ranking
+- personalized nutrition guidance layer
+  - goal-based meal guidance and narrow lab-marker-informed food recommendations within non-diagnostic boundaries
 
 ## Nutrition Data Sources
 
@@ -109,8 +113,8 @@ Qima/
 │   └── Recipes/
 │       └── 13k-recipes.csv
 ├── Docs/
-│   ├── Architecture_Updated_260417_v13.docx
-│   └── Decision_Log_Updated_260417_v13.docx
+│   ├── Architecture_Updated_260422_v14.docx
+│   └── Decision_Log_Updated_260422_v14.docx
 ├── .gitignore
 └── LICENSE
 ```
@@ -124,6 +128,8 @@ The current architecture baseline establishes these constraints:
 - barcode and non-barcode flows remain separate upstream
 - all nutrition responses should be normalized into one backend-owned schema
 - recipe outputs should remain grounded in retrieved recipe data
+- price, lab-marker, and goal-based recommendation layers remain backend-managed and contract-first
+- lab-marker-informed guidance must stay food-oriented, whitelist-based, and non-diagnostic
 
 ## Current Status
 
@@ -139,8 +145,8 @@ The README should be updated as implementation files for the mobile client, back
 
 Before contributing, read:
 
-- `Docs/Architecture_Updated_260417_v13.docx`
-- `Docs/Decision_Log_Updated_260417_v13.docx`
+- `Docs/Architecture_Updated_260422_v14.docx`
+- `Docs/Decision_Log_Updated_260422_v14.docx`
 
 All contributions must follow the architecture and design rules documented there.
 
