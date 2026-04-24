@@ -1,0 +1,827 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/plans_generate.json",
+  "title": "Plans Generate API Contract V1",
+  "description": "Contract-first schema for POST /v1/plans/generate request and response. Generates bounded, grounded goal-based meal guidance using either saved profile context or an inline profile, nutrition targets, recipe retrieval, optional pantry context, and optional budget constraints.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["endpoint", "method", "request", "responses"],
+  "properties": {
+    "endpoint": {
+      "const": "/v1/plans/generate"
+    },
+    "method": {
+      "const": "POST"
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contentType", "body"],
+      "properties": {
+        "contentType": {
+          "const": "application/json"
+        },
+        "body": {
+          "$ref": "#/$defs/PlansGenerateRequest"
+        }
+      }
+    },
+    "responses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["200", "400", "422", "429", "500", "503"],
+      "properties": {
+        "200": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["description", "body"],
+          "properties": {
+            "description": {
+              "const": "Successful meal guidance generation"
+            },
+            "body": {
+              "$ref": "#/$defs/PlansGenerateSuccess"
+            }
+          }
+        },
+        "400": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "422": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "429": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "500": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        },
+        "503": {
+          "$ref": "#/$defs/ErrorResponseSpec"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "PlansGenerateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profile_id": {
+          "type": "string",
+          "pattern": "^profile_[a-zA-Z0-9_\\-]{6,}$",
+          "description": "Saved backend profile identifier. If supplied, backend fetches stored profile context. If not supplied, an inline profile object is required."
+        },
+        "profile": {
+          "$ref": "#/$defs/Profile"
+        },
+        "pantry": {
+          "type": ["array", "null"],
+          "description": "Optional pantry or available ingredient list used for grounded meal/recipe ranking.",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/PantryItem"
+          }
+        },
+        "budget": {
+          "$ref": "#/$defs/BudgetConstraint"
+        },
+        "dietary_filters": {
+          "type": "array",
+          "description": "Optional soft filters applied during meal guidance and recipe ranking. For example, budget_friendly is a soft ranking preference; BudgetConstraint.max_total_cost is the hard budget limit.",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/DietaryFilter"
+          }
+        },
+        "plan_preferences": {
+          "$ref": "#/$defs/PlanPreferences"
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["profile_id"]
+        },
+        {
+          "required": ["profile"]
+        }
+      ]
+    },
+    "Profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "age_years",
+        "sex",
+        "height_cm",
+        "weight_kg",
+        "activity_level",
+        "goal"
+      ],
+      "properties": {
+        "age_years": {
+          "type": "integer",
+          "minimum": 18,
+          "description": "Age in years. Goal-based meal guidance is limited to generally healthy adults at launch."
+        },
+        "sex": {
+          "type": "string",
+          "enum": ["male", "female", "other", "prefer_not_to_say"]
+        },
+        "height_cm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "weight_kg": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "activity_level": {
+          "type": "string",
+          "enum": [
+            "sedentary",
+            "lightly_active",
+            "moderately_active",
+            "very_active",
+            "athlete"
+          ]
+        },
+        "goal": {
+          "type": "string",
+          "enum": [
+            "lose_weight",
+            "gain_muscle",
+            "maintain_weight",
+            "improve_general_health"
+          ]
+        },
+        "allergens": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/Allergen"
+          }
+        },
+        "dietary_exclusions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/DietaryExclusion"
+          }
+        },
+        "exclusion_flags": {
+          "type": "array",
+          "description": "Safety-relevant exclusions used to narrow or block unsupported meal guidance.",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/ExclusionFlag"
+          }
+        }
+      }
+    },
+    "PantryItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quantity": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Unit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "BudgetConstraint": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Optional hard budget constraint used for estimated-cost-aware ranking. max_total_cost is a hard limit where possible. Prices are estimates, not live market prices.",
+      "properties": {
+        "max_total_cost": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["EGP"]
+        },
+        "geography": {
+          "type": ["string", "null"],
+          "description": "Optional geography hint, such as Cairo or Egypt."
+        }
+      }
+    },
+    "PlanPreferences": {
+      "type": ["object", "null"],
+      "description": "Optional plan-level preferences. If omitted or null, backend defaults may be applied, such as 3 meals, no snacks, and single_day guidance.",
+      "additionalProperties": false,
+      "properties": {
+        "meal_count": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 6,
+          "description": "Optional requested number of meals. If null or omitted, backend may default to 3 meals."
+        },
+        "include_snacks": {
+          "type": ["boolean", "null"],
+          "description": "Optional snack preference. If null or omitted, backend may default to false."
+        },
+        "time_horizon": {
+          "type": ["string", "null"],
+          "enum": ["single_day", "single_meal", null],
+          "description": "Optional plan horizon. If null or omitted, backend may default to single_day."
+        }
+      }
+    },
+    "PlansGenerateSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "plan_id",
+        "support_status",
+        "nutrition_targets",
+        "meals",
+        "rationale",
+        "safety_flags",
+        "source",
+        "data_quality"
+      ],
+      "properties": {
+        "plan_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "support_status": {
+          "$ref": "#/$defs/SupportStatus"
+        },
+        "nutrition_targets": {
+          "$ref": "#/$defs/NutritionTargets"
+        },
+        "meals": {
+          "type": "array",
+          "description": "Grounded meal or recipe candidates selected from backend retrieval/ranking. Empty when unsupported.",
+          "items": {
+            "$ref": "#/$defs/MealCandidate"
+          }
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Backend-generated grounded rationale. Must not be diagnosis, treatment, or unrestricted diet therapy."
+        },
+        "safety_flags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/SafetyFlag"
+          }
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        },
+        "data_quality": {
+          "$ref": "#/$defs/DataQuality"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "NutritionTargets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "calories_kcal",
+        "protein_g",
+        "carbohydrates_g",
+        "fat_g",
+        "target_basis"
+      ],
+      "properties": {
+        "calories_kcal": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "protein_g": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "carbohydrates_g": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "fat_g": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "target_basis": {
+          "type": "string",
+          "enum": ["estimated", "unavailable"],
+          "description": "Indicates whether nutrition targets were estimated by backend rules or unavailable due to unsupported/incomplete profile."
+        }
+      }
+    },
+    "MealCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "meal_id",
+        "title",
+        "meal_type",
+        "matched_ingredients",
+        "missing_ingredients",
+        "estimated_nutrition",
+        "estimated_cost",
+        "score",
+        "warnings",
+        "source"
+      ],
+      "properties": {
+        "meal_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "meal_type": {
+          "type": "string",
+          "enum": ["breakfast", "lunch", "dinner", "snack", "unspecified"]
+        },
+        "matched_ingredients": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "missing_ingredients": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "estimated_nutrition": {
+          "$ref": "#/$defs/EstimatedNutrition"
+        },
+        "estimated_cost": {
+          "$ref": "#/$defs/EstimatedCost"
+        },
+        "score": {
+          "$ref": "#/$defs/MealScore"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "source": {
+          "$ref": "#/$defs/MealSource"
+        }
+      }
+    },
+    "EstimatedNutrition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["calories_kcal", "protein_g", "carbohydrates_g", "fat_g"],
+      "properties": {
+        "calories_kcal": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "protein_g": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "carbohydrates_g": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "fat_g": {
+          "type": ["number", "null"],
+          "minimum": 0
+        }
+      }
+    },
+    "EstimatedCost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_cost", "currency", "estimate_quality"],
+      "properties": {
+        "total_cost": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["EGP"]
+        },
+        "estimate_quality": {
+          "type": "string",
+          "enum": ["complete", "partial", "unavailable"]
+        }
+      }
+    },
+    "MealScore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "overall",
+        "ingredient_match",
+        "target_fit",
+        "cost_fit",
+        "safety_score"
+      ],
+      "properties": {
+        "overall": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "ingredient_match": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "target_fit": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "cost_fit": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "safety_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Safety/compliance score where 1.0 means no known warning conflict and 0.0 means severe conflict or unsupported safety state. Higher is better."
+        }
+      }
+    },
+    "SupportStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["supported", "partially_supported", "unsupported"]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "Source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "source_type", "fetched_at"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["qima_backend"]
+        },
+        "source_type": {
+          "type": "string",
+          "enum": ["meal_plan_ranker"]
+        },
+        "fetched_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "MealSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_type"],
+      "properties": {
+        "source_type": {
+          "type": "string",
+          "enum": ["recipe_corpus", "nutrition_dataset", "mixed_sources"]
+        },
+        "recipe_id": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "DataQuality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completeness"],
+      "properties": {
+        "completeness": {
+          "type": "string",
+          "enum": ["complete", "partial"]
+        }
+      }
+    },
+    "Unit": {
+      "type": "string",
+      "enum": [
+        "g",
+        "kg",
+        "ml",
+        "l",
+        "piece",
+        "tbsp",
+        "tsp",
+        "cup",
+        "pack",
+        "can",
+        "bunch",
+        "clove",
+        "head"
+      ]
+    },
+    "Allergen": {
+      "type": "string",
+      "enum": [
+        "milk",
+        "egg",
+        "fish",
+        "shellfish",
+        "tree_nuts",
+        "peanuts",
+        "wheat",
+        "soy",
+        "sesame",
+        "other"
+      ]
+    },
+    "DietaryExclusion": {
+      "type": "string",
+      "enum": [
+        "pork",
+        "alcohol",
+        "meat",
+        "poultry",
+        "fish",
+        "shellfish",
+        "dairy",
+        "eggs",
+        "gluten",
+        "soy",
+        "nuts",
+        "added_sugar",
+        "high_sodium",
+        "other"
+      ]
+    },
+    "DietaryFilter": {
+      "type": "string",
+      "enum": [
+        "halal",
+        "vegetarian",
+        "vegan",
+        "high_protein",
+        "high_fiber",
+        "low_sugar",
+        "low_sodium",
+        "budget_friendly",
+        "egyptian_foods",
+        "quick_meals"
+      ]
+    },
+    "ExclusionFlag": {
+      "type": "string",
+      "enum": [
+        "pregnancy",
+        "adolescent",
+        "underweight",
+        "eating_disorder_risk",
+        "kidney_disease",
+        "diabetes",
+        "other_clinical_condition"
+      ]
+    },
+    "SafetyFlag": {
+      "type": "string",
+      "enum": [
+        "non_diagnostic",
+        "no_treatment_advice",
+        "no_supplement_prescription",
+        "general_information_only",
+        "profile_exclusion_triggered",
+        "incomplete_profile",
+        "estimated_targets_only",
+        "estimated_cost_only"
+      ]
+    },
+    "ErrorResponseSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "body"],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "body": {
+          "$ref": "contracts/v1/error_response.json"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "endpoint": "/v1/plans/generate",
+      "method": "POST",
+      "request": {
+        "contentType": "application/json",
+        "body": {
+          "profile": {
+            "age_years": 22,
+            "sex": "male",
+            "height_cm": 178,
+            "weight_kg": 78,
+            "activity_level": "moderately_active",
+            "goal": "gain_muscle",
+            "allergens": ["peanuts"],
+            "dietary_exclusions": ["pork"],
+            "exclusion_flags": []
+          },
+          "pantry": [
+            {
+              "name": "rice",
+              "quantity": 500,
+              "unit": "g"
+            },
+            {
+              "name": "chicken",
+              "quantity": 1,
+              "unit": "piece"
+            }
+          ],
+          "budget": {
+            "max_total_cost": 120,
+            "currency": "EGP",
+            "geography": "Cairo"
+          },
+          "dietary_filters": ["halal", "high_protein", "budget_friendly"],
+          "plan_preferences": {
+            "meal_count": 3,
+            "include_snacks": false,
+            "time_horizon": "single_day"
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful meal guidance generation",
+          "body": {
+            "plan_id": "plan_10001",
+            "support_status": {
+              "status": "supported",
+              "reason": "Profile is within the generally healthy adult guidance boundary."
+            },
+            "nutrition_targets": {
+              "calories_kcal": 2600,
+              "protein_g": 130,
+              "carbohydrates_g": 300,
+              "fat_g": 75,
+              "target_basis": "estimated"
+            },
+            "meals": [
+              {
+                "meal_id": "meal_10001",
+                "title": "Chicken rice bowl",
+                "meal_type": "lunch",
+                "matched_ingredients": ["rice", "chicken"],
+                "missing_ingredients": ["vegetables"],
+                "estimated_nutrition": {
+                  "calories_kcal": 620,
+                  "protein_g": 42,
+                  "carbohydrates_g": 72,
+                  "fat_g": 16
+                },
+                "estimated_cost": {
+                  "total_cost": 85,
+                  "currency": "EGP",
+                  "estimate_quality": "partial"
+                },
+                "score": {
+                  "overall": 0.82,
+                  "ingredient_match": 0.78,
+                  "target_fit": 0.86,
+                  "cost_fit": 0.8,
+                  "safety_score": 1
+                },
+                "warnings": [
+                  "Cost is estimated and may vary by shop, brand, and date."
+                ],
+                "source": {
+                  "source_type": "recipe_corpus",
+                  "recipe_id": "recipe_chicken_rice_001"
+                }
+              }
+            ],
+            "rationale": "Suggested meals are ranked using the provided goal, available pantry items, dietary filters, estimated nutrition, and estimated cost. This is general food guidance, not medical advice.",
+            "safety_flags": [
+              "non_diagnostic",
+              "estimated_targets_only",
+              "estimated_cost_only"
+            ],
+            "source": {
+              "provider": "qima_backend",
+              "source_type": "meal_plan_ranker",
+              "fetched_at": "2026-04-24T10:00:00Z"
+            },
+            "data_quality": {
+              "completeness": "partial"
+            },
+            "warnings": [
+              "Goal-based meal guidance is limited to generally healthy adults.",
+              "This response is not diagnosis, treatment, or clinical diet therapy."
+            ]
+          }
+        },
+        "400": {
+          "description": "Malformed plan generation request",
+          "body": {
+            "error": {
+              "code": "BAD_REQUEST",
+              "message": "Request contains malformed or incomplete plan-generation data.",
+              "retryable": false,
+              "request_id": "req_60001",
+              "details": null
+            }
+          }
+        },
+        "422": {
+          "description": "Request validation failed",
+          "body": {
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "Request body failed schema validation.",
+              "retryable": false,
+              "request_id": "req_60002",
+              "details": null
+            }
+          }
+        },
+        "429": {
+          "description": "Rate limit exceeded",
+          "body": {
+            "error": {
+              "code": "RATE_LIMITED",
+              "message": "Too many requests. Try again later.",
+              "retryable": true,
+              "request_id": "req_60003",
+              "details": null
+            }
+          }
+        },
+        "500": {
+          "description": "Unexpected internal failure",
+          "body": {
+            "error": {
+              "code": "INTERNAL_ERROR",
+              "message": "Unexpected server error.",
+              "retryable": true,
+              "request_id": "req_60004",
+              "details": null
+            }
+          }
+        },
+        "503": {
+          "description": "Meal guidance source unavailable",
+          "body": {
+            "error": {
+              "code": "UPSTREAM_UNAVAILABLE",
+              "message": "Meal guidance source is currently unavailable.",
+              "retryable": true,
+              "request_id": "req_60005",
+              "details": null
+            }
+          }
+        }
+      }
+    }
+  ]
+}
