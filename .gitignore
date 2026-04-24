@@ -1,5 +1,11 @@
 data/Food/FoodData_Central_sr_legacy_food_json_2018-04.json
 data/Food/FoodData_Central_foundation_food_json_2025-12-18.json
 .docx_work/
-Environment/.env
+backend/.env
 .docx_inspect/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.log
