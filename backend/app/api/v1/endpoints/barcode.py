@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app.schemas.barcode import BarcodeLookupRequest, BarcodeLookupSuccess
+from app.schemas.v1.barcode import BarcodeLookupRequest, BarcodeLookupSuccess
 from app.services.barcode_service import BarcodeService
 from app.services.exceptions import NotFoundError, UpstreamUnavailableError
 
