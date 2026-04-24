@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app.schemas.labs import LabsInterpretRequest, LabsInterpretSuccess
+from app.schemas.v1.labs import LabsInterpretRequest, LabsInterpretSuccess
 from app.services.exceptions import NotFoundError, UpstreamUnavailableError
 from app.services.labs_service import LabsService
 
