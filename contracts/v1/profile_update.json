@@ -1,0 +1,483 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/profile_update.json",
+  "title": "Profile Update API Contract V1",
+  "description": "Contract-first schema for POST /v1/profile/update request and response. Creates or updates bounded user profile context for allergens, dietary constraints, goal-based guidance, exclusion handling, and safety limits.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["endpoint", "method", "request", "responses"],
+  "properties": {
+    "endpoint": {
+      "const": "/v1/profile/update"
+    },
+    "method": {
+      "const": "POST"
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contentType", "body"],
+      "properties": {
+        "contentType": {
+          "const": "application/json"
+        },
+        "body": {
+          "$ref": "#/$defs/ProfileUpdateRequest"
+        }
+      }
+    },
+    "responses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["200", "400", "422", "429", "500", "503"],
+      "properties": {
+        "200": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["description", "body"],
+          "properties": {
+            "description": {
+              "const": "Successful profile update"
+            },
+            "body": {
+              "$ref": "#/$defs/ProfileUpdateSuccess"
+            }
+          }
+        },
+        "400": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "422": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "429": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "500": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "503": { "$ref": "#/$defs/ErrorResponseSpec" }
+      }
+    }
+  },
+  "$defs": {
+    "ProfileUpdateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profile_id": {
+          "type": ["string", "null"],
+          "description": "Optional existing backend profile identifier. Null for new or guest/session-scoped profiles."
+        },
+        "age_years": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Age in years. Goal-based and lab-marker-informed guidance is limited by backend support and exclusion rules."
+        },
+        "sex": {
+          "type": ["string", "null"],
+          "enum": ["male", "female", "other", "prefer_not_to_say", null]
+        },
+        "height_cm": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0
+        },
+        "weight_kg": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0
+        },
+        "activity_level": {
+          "type": ["string", "null"],
+          "enum": [
+            "sedentary",
+            "lightly_active",
+            "moderately_active",
+            "very_active",
+            "athlete",
+            null
+          ]
+        },
+        "goal": {
+          "type": ["string", "null"],
+          "enum": [
+            "lose_weight",
+            "gain_muscle",
+            "maintain_weight",
+            "improve_general_health",
+            "budget_friendly_eating",
+            null
+          ]
+        },
+        "allergens": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Allergen"
+          }
+        },
+        "dietary_exclusions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DietaryExclusion"
+          }
+        },
+        "dietary_preferences": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DietaryPreference"
+          }
+        },
+        "exclusion_flags": {
+          "type": "array",
+          "description": "Safety-relevant exclusions used to narrow or block unsupported personalized guidance.",
+          "items": {
+            "$ref": "#/$defs/ExclusionFlag"
+          }
+        }
+      }
+    },
+    "ProfileUpdateSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "normalized_profile",
+        "validation_flags",
+        "limitation_flags",
+        "support_status",
+        "updated_at"
+      ],
+      "properties": {
+        "profile_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "normalized_profile": {
+          "$ref": "#/$defs/NormalizedProfile"
+        },
+        "validation_flags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValidationFlag"
+          }
+        },
+        "limitation_flags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LimitationFlag"
+          }
+        },
+        "support_status": {
+          "$ref": "#/$defs/SupportStatus"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "NormalizedProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "age_years",
+        "sex",
+        "height_cm",
+        "weight_kg",
+        "activity_level",
+        "goal",
+        "allergens",
+        "dietary_exclusions",
+        "dietary_preferences",
+        "exclusion_flags"
+      ],
+      "properties": {
+        "age_years": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "sex": {
+          "type": ["string", "null"],
+          "enum": ["male", "female", "other", "prefer_not_to_say", null]
+        },
+        "height_cm": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0
+        },
+        "weight_kg": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0
+        },
+        "activity_level": {
+          "type": ["string", "null"],
+          "enum": [
+            "sedentary",
+            "lightly_active",
+            "moderately_active",
+            "very_active",
+            "athlete",
+            null
+          ]
+        },
+        "goal": {
+          "type": ["string", "null"],
+          "enum": [
+            "lose_weight",
+            "gain_muscle",
+            "maintain_weight",
+            "improve_general_health",
+            "budget_friendly_eating",
+            null
+          ]
+        },
+        "allergens": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Allergen"
+          }
+        },
+        "dietary_exclusions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DietaryExclusion"
+          }
+        },
+        "dietary_preferences": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DietaryPreference"
+          }
+        },
+        "exclusion_flags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExclusionFlag"
+          }
+        }
+      }
+    },
+    "Allergen": {
+      "type": "string",
+      "enum": [
+        "milk",
+        "egg",
+        "fish",
+        "shellfish",
+        "tree_nuts",
+        "peanuts",
+        "wheat",
+        "soy",
+        "sesame",
+        "other"
+      ]
+    },
+    "DietaryExclusion": {
+      "type": "string",
+      "enum": [
+        "pork",
+        "alcohol",
+        "meat",
+        "poultry",
+        "fish",
+        "shellfish",
+        "dairy",
+        "eggs",
+        "gluten",
+        "soy",
+        "nuts",
+        "added_sugar",
+        "high_sodium",
+        "other"
+      ]
+    },
+    "DietaryPreference": {
+      "type": "string",
+      "enum": [
+        "halal",
+        "vegetarian",
+        "vegan",
+        "high_protein",
+        "high_fiber",
+        "low_sugar",
+        "low_sodium",
+        "budget_friendly",
+        "egyptian_foods",
+        "quick_meals"
+      ]
+    },
+    "ExclusionFlag": {
+      "type": "string",
+      "enum": [
+        "pregnancy",
+        "adolescent",
+        "underweight",
+        "eating_disorder_risk",
+        "kidney_disease",
+        "diabetes",
+        "other_clinical_condition"
+      ]
+    },
+    "ValidationFlag": {
+      "type": "string",
+      "enum": [
+        "missing_age",
+        "missing_sex",
+        "missing_height",
+        "missing_weight",
+        "missing_activity_level",
+        "missing_goal",
+        "partial_profile",
+        "invalid_or_unsupported_value"
+      ]
+    },
+    "LimitationFlag": {
+      "type": "string",
+      "enum": [
+        "general_information_only",
+        "goal_guidance_unavailable",
+        "lab_guidance_limited",
+        "profile_exclusion_triggered",
+        "incomplete_profile",
+        "guest_or_session_scoped"
+      ]
+    },
+    "SupportStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["supported", "partially_supported", "unsupported"]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "ErrorResponseSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "body"],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "body": {
+          "$ref": "contracts/v1/error_response.json"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "endpoint": "/v1/profile/update",
+      "method": "POST",
+      "request": {
+        "contentType": "application/json",
+        "body": {
+          "profile_id": null,
+          "age_years": 22,
+          "sex": "male",
+          "height_cm": 178,
+          "weight_kg": 78,
+          "activity_level": "moderately_active",
+          "goal": "gain_muscle",
+          "allergens": ["peanuts"],
+          "dietary_exclusions": ["pork"],
+          "dietary_preferences": ["halal", "high_protein", "budget_friendly"],
+          "exclusion_flags": []
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful profile update",
+          "body": {
+            "profile_id": "profile_10001",
+            "normalized_profile": {
+              "age_years": 22,
+              "sex": "male",
+              "height_cm": 178,
+              "weight_kg": 78,
+              "activity_level": "moderately_active",
+              "goal": "gain_muscle",
+              "allergens": ["peanuts"],
+              "dietary_exclusions": ["pork"],
+              "dietary_preferences": ["halal", "high_protein", "budget_friendly"],
+              "exclusion_flags": []
+            },
+            "validation_flags": [],
+            "limitation_flags": ["guest_or_session_scoped"],
+            "support_status": {
+              "status": "supported",
+              "reason": "Profile fields are sufficient for bounded goal-based guidance."
+            },
+            "updated_at": "2026-04-24T10:00:00Z",
+            "warnings": [
+              "Profile context is used for filtering, warnings, ranking, and bounded guidance only. It is not diagnosis or treatment."
+            ]
+          }
+        },
+        "400": {
+          "description": "Malformed profile update request",
+          "body": {
+            "error": {
+              "code": "BAD_REQUEST",
+              "message": "Request contains malformed profile data.",
+              "retryable": false,
+              "request_id": "req_50001",
+              "details": null
+            }
+          }
+        },
+        "422": {
+          "description": "Request validation failed",
+          "body": {
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "Request body failed schema validation.",
+              "retryable": false,
+              "request_id": "req_50002",
+              "details": null
+            }
+          }
+        },
+        "429": {
+          "description": "Rate limit exceeded",
+          "body": {
+            "error": {
+              "code": "RATE_LIMITED",
+              "message": "Too many requests. Try again later.",
+              "retryable": true,
+              "request_id": "req_50003",
+              "details": null
+            }
+          }
+        },
+        "500": {
+          "description": "Unexpected internal failure",
+          "body": {
+            "error": {
+              "code": "INTERNAL_ERROR",
+              "message": "Unexpected server error.",
+              "retryable": true,
+              "request_id": "req_50004",
+              "details": null
+            }
+          }
+        },
+        "503": {
+          "description": "Profile storage unavailable",
+          "body": {
+            "error": {
+              "code": "UPSTREAM_UNAVAILABLE",
+              "message": "Profile storage is currently unavailable.",
+              "retryable": true,
+              "request_id": "req_50005",
+              "details": null
+            }
+          }
+        }
+      }
+    }
+  ]
+}

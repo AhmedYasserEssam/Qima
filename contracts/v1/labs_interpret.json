@@ -1,0 +1,490 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/labs_interpret.json",
+  "title": "Labs Interpret API Contract V1",
+  "description": "Contract-first schema for POST /v1/labs/interpret request and response. Provides whitelist-only, food-oriented, non-diagnostic lab-marker-informed nutrition guidance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["endpoint", "method", "request", "responses"],
+  "properties": {
+    "endpoint": {
+      "const": "/v1/labs/interpret"
+    },
+    "method": {
+      "const": "POST"
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contentType", "body"],
+      "properties": {
+        "contentType": {
+          "const": "application/json"
+        },
+        "body": {
+          "$ref": "#/$defs/LabsInterpretRequest"
+        }
+      }
+    },
+    "responses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["200", "400", "404", "422", "429", "500", "503"],
+      "properties": {
+        "200": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["description", "body"],
+          "properties": {
+            "description": {
+              "const": "Successful lab-marker interpretation"
+            },
+            "body": {
+              "$ref": "#/$defs/LabsInterpretSuccess"
+            }
+          }
+        },
+        "400": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "404": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "422": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "429": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "500": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "503": { "$ref": "#/$defs/ErrorResponseSpec" }
+      }
+    }
+  },
+  "$defs": {
+    "LabsInterpretRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["marker_name", "value", "unit", "reference_range"],
+      "properties": {
+        "marker_name": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$",
+          "description": "Backend-normalized lab marker key, such as ferritin, vitamin_d, b12, hemoglobin, or magnesium."
+        },
+        "value": {
+          "type": "number",
+          "description": "User-provided lab marker value."
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unit shown on the user's lab result. Must be checked against the backend-supported whitelist for the selected marker."
+        },
+        "reference_range": {
+          "$ref": "#/$defs/ReferenceRange"
+        },
+        "profile_context": {
+          "$ref": "#/$defs/ProfileContext"
+        }
+      }
+    },
+    "ReferenceRange": {
+      "type": "object",
+      "description": "User-provided lab reference range. Matching units are preferred. If the reference range unit differs from the marker unit, the backend must either perform an explicitly supported conversion or return a limitation/validation response.",
+      "additionalProperties": false,
+      "required": ["low", "high", "unit"],
+      "properties": {
+        "low": {
+          "type": ["number", "null"],
+          "description": "Lower bound from the user's lab report. Null only when the report does not provide a lower bound."
+        },
+        "high": {
+          "type": ["number", "null"],
+          "description": "Upper bound from the user's lab report. Null only when the report does not provide an upper bound."
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Reference range unit exactly as provided or normalized by the client."
+        }
+      }
+    },
+    "ProfileContext": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Optional bounded profile context used only for support checks and safety limits.",
+      "properties": {
+        "age_years": {
+          "type": ["integer", "null"],
+          "minimum": 18,
+          "description": "Age in years. Lab-marker-informed guidance is limited to generally healthy adults at launch."
+        },
+        "sex": {
+          "type": ["string", "null"],
+          "enum": ["male", "female", "other", "prefer_not_to_say", null]
+        },
+        "exclusion_flags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExclusionFlag"
+          }
+        }
+      }
+    },
+    "ExclusionFlag": {
+      "type": "string",
+      "enum": [
+        "pregnancy",
+        "adolescent",
+        "underweight",
+        "eating_disorder_risk",
+        "kidney_disease",
+        "diabetes",
+        "other_clinical_condition"
+      ]
+    },
+    "LabsInterpretSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "interpretation_id",
+        "supported_marker",
+        "marker",
+        "range_comparison",
+        "used_user_range",
+        "nutrient_themes",
+        "food_guidance",
+        "safety_flags",
+        "support_status",
+        "source"
+      ],
+      "properties": {
+        "interpretation_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Backend identifier for this lab-marker guidance response."
+        },
+        "supported_marker": {
+          "type": "boolean",
+          "description": "Whether the submitted marker is supported by the validated backend whitelist."
+        },
+        "marker": {
+          "$ref": "#/$defs/MarkerResult"
+        },
+        "range_comparison": {
+          "type": "string",
+          "enum": ["below_range", "within_range", "above_range", "unknown"],
+          "description": "Backend comparison against the user-provided reference range when usable."
+        },
+        "used_user_range": {
+          "type": "boolean",
+          "description": "Whether the backend used the submitted reference range for comparison."
+        },
+        "nutrient_themes": {
+          "type": "array",
+          "description": "Food-oriented nutrient themes mapped from the supported marker. Empty when unsupported.",
+          "items": {
+            "$ref": "#/$defs/NutrientTheme"
+          }
+        },
+        "food_guidance": {
+          "type": "array",
+          "description": "Conservative food-oriented guidance. Must not include diagnosis, treatment, urgency, or supplement prescription.",
+          "items": {
+            "$ref": "#/$defs/FoodGuidance"
+          }
+        },
+        "safety_flags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SafetyFlag"
+          }
+        },
+        "support_status": {
+          "$ref": "#/$defs/SupportStatus"
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        },
+        "warnings": {
+          "type": "array",
+          "description": "Optional backend warnings about unsupported markers, ambiguous units, missing profile context, or non-diagnostic limits.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "MarkerResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "normalized_name", "value", "unit"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "normalized_name": {
+          "type": ["string", "null"],
+          "description": "Backend-normalized marker identifier. Null when unsupported."
+        },
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "NutrientTheme": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["theme", "reason"],
+      "properties": {
+        "theme": {
+          "type": "string",
+          "enum": [
+            "iron_rich_foods",
+            "vitamin_d_foods",
+            "b12_foods",
+            "folate_foods",
+            "magnesium_foods",
+            "hydration_and_electrolytes",
+            "general_balanced_diet"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "FoodGuidance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["guidance_type", "message", "foods"],
+      "properties": {
+        "guidance_type": {
+          "type": "string",
+          "enum": ["include_foods", "limit_foods", "general_note", "clinician_discussion"]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "foods": {
+          "type": "array",
+          "description": "Grounded food examples. Empty for non-food general notes or clinician-discussion guidance.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "SafetyFlag": {
+      "type": "string",
+      "enum": [
+        "non_diagnostic",
+        "no_treatment_advice",
+        "no_supplement_prescription",
+        "unsupported_marker",
+        "unsupported_unit",
+        "ambiguous_reference_range",
+        "profile_exclusion_triggered",
+        "clinician_discussion_recommended"
+      ]
+    },
+    "SupportStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["supported", "partially_supported", "unsupported"]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "Source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "source_type", "fetched_at"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["validated_lab_marker_mapping_table"]
+        },
+        "source_type": {
+          "type": "string",
+          "enum": ["lab_marker_rules"]
+        },
+        "fetched_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "ErrorResponseSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "body"],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "body": {
+          "$ref": "contracts/v1/error_response.json"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "endpoint": "/v1/labs/interpret",
+      "method": "POST",
+      "request": {
+        "contentType": "application/json",
+        "body": {
+          "marker_name": "ferritin",
+          "value": 18,
+          "unit": "ng/mL",
+          "reference_range": {
+            "low": 30,
+            "high": 300,
+            "unit": "ng/mL"
+          },
+          "profile_context": {
+            "age_years": 22,
+            "sex": "male",
+            "exclusion_flags": []
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful lab-marker interpretation",
+          "body": {
+            "interpretation_id": "lab_int_10001",
+            "supported_marker": true,
+            "marker": {
+              "name": "ferritin",
+              "normalized_name": "ferritin",
+              "value": 18,
+              "unit": "ng/mL"
+            },
+            "range_comparison": "below_range",
+            "used_user_range": true,
+            "nutrient_themes": [
+              {
+                "theme": "iron_rich_foods",
+                "reason": "Ferritin is mapped to iron-related food guidance when the marker and unit are supported."
+              }
+            ],
+            "food_guidance": [
+              {
+                "guidance_type": "include_foods",
+                "message": "Consider including iron-containing foods as part of a balanced diet.",
+                "foods": ["lentils", "beans", "spinach", "red meat", "chicken", "fish"]
+              },
+              {
+                "guidance_type": "clinician_discussion",
+                "message": "Because the value is outside the provided reference range, discuss the result with a qualified clinician.",
+                "foods": []
+              }
+            ],
+            "safety_flags": [
+              "non_diagnostic",
+              "no_treatment_advice",
+              "no_supplement_prescription",
+              "clinician_discussion_recommended"
+            ],
+            "support_status": {
+              "status": "supported",
+              "reason": "Marker, unit, and reference range are supported by the backend whitelist."
+            },
+            "source": {
+              "provider": "validated_lab_marker_mapping_table",
+              "source_type": "lab_marker_rules",
+              "fetched_at": "2026-04-24T10:00:00Z"
+            },
+            "warnings": [
+              "This is food-oriented guidance only and is not a diagnosis or treatment plan."
+            ]
+          }
+        },
+        "400": {
+          "description": "Malformed request or unsupported lab-marker input",
+          "body": {
+            "error": {
+              "code": "BAD_REQUEST",
+              "message": "Request is missing a valid lab marker, value, unit, or reference range.",
+              "retryable": false,
+              "request_id": "req_40001",
+              "details": null
+            }
+          }
+        },
+        "404": {
+          "description": "No supported lab-marker rule found",
+          "body": {
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "No supported lab-marker rule found for the supplied marker.",
+              "retryable": false,
+              "request_id": "req_40002",
+              "details": null
+            }
+          }
+        },
+        "422": {
+          "description": "Request validation failed",
+          "body": {
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "Request body failed schema validation.",
+              "retryable": false,
+              "request_id": "req_40003",
+              "details": null
+            }
+          }
+        },
+        "429": {
+          "description": "Rate limit exceeded",
+          "body": {
+            "error": {
+              "code": "RATE_LIMITED",
+              "message": "Too many requests. Try again later.",
+              "retryable": true,
+              "request_id": "req_40004",
+              "details": null
+            }
+          }
+        },
+        "500": {
+          "description": "Unexpected internal failure",
+          "body": {
+            "error": {
+              "code": "INTERNAL_ERROR",
+              "message": "Unexpected server error.",
+              "retryable": true,
+              "request_id": "req_40005",
+              "details": null
+            }
+          }
+        },
+        "503": {
+          "description": "Lab-marker guidance source unavailable",
+          "body": {
+            "error": {
+              "code": "UPSTREAM_UNAVAILABLE",
+              "message": "Lab-marker guidance source is currently unavailable.",
+              "retryable": true,
+              "request_id": "req_40006",
+              "details": null
+            }
+          }
+        }
+      }
+    }
+  ]
+}
