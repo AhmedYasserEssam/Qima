@@ -8,9 +8,8 @@ This setup assumes the repository contains:
 
 - `backend/requirements.txt`
 - `backend/requirements-dev.txt`
-- `Environment/env.example`
+- `backend/.env.example`
 
-If your local repo uses a different folder for `env.example`, use the real path in the commands.
 
 ---
 
@@ -70,20 +69,6 @@ pip install -r backend/requirements-dev.txt
 ## 4) Create your local environment file
 
 Copy the example environment file to a real `.env` file.
-
-### Windows PowerShell
-
-```powershell
-Copy-Item ".\Environment\env.example" ".\Environment\.env"
-```
-
-### macOS / Linux
-
-```bash
-cp Environment/env.example Environment/.env
-```
-
-If your project uses `backend/.env.example` instead, use:
 
 ### Windows PowerShell
 
@@ -155,7 +140,6 @@ Add these lines to `.gitignore` in the repository root:
 
 ```gitignore
 .venv/
-Environment/.env
 backend/.env
 __pycache__/
 *.pyc
@@ -164,12 +148,6 @@ __pycache__/
 If `.env` was already tracked before adding `.gitignore`, untrack it:
 
 ### Windows / macOS / Linux
-
-```bash
-git rm --cached Environment/.env
-```
-
-Or, if your `.env` is in `backend`:
 
 ```bash
 git rm --cached backend/.env
@@ -186,13 +164,11 @@ Do not commit the real `.env`.
 ```bash
 git checkout -b chore/bootstrap-env
 git add backend/requirements.txt backend/requirements-dev.txt
-git add Environment/env.example
+git add backend/.env.example
 git add .gitignore
 git commit -m "Add starter environment setup"
 git push -u origin chore/bootstrap-env
 ```
-
-If your example file is in `backend/.env.example`, add that file instead of `Environment/env.example`.
 
 ---
 
@@ -205,7 +181,7 @@ py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r backend/requirements-dev.txt
-Copy-Item ".\Environment\env.example" ".\Environment\.env"
+Copy-Item ".\backend\.env.example" ".\backend\.env"
 ```
 
 ### macOS / Linux
@@ -215,11 +191,11 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r backend/requirements-dev.txt
-cp Environment/env.example Environment/.env
+cp backend/.env.example backend/.env
 ```
 
 Then:
-1. open `.env`
+1. open `backend/.env`
 2. fill in the real values
 3. create the PostgreSQL database `qima`
 4. run the smoke test
@@ -249,13 +225,13 @@ If your path contains spaces, always wrap the path in quotes.
 Correct:
 
 ```powershell
-Copy-Item ".\Environment\env.example" ".\Environment\.env"
+Copy-Item ".\backend\.env.example" ".\backend\.env"
 ```
 
 Incorrect:
 
 ```powershell
-Copy-Item .\Environment\env.example .\Environment\.env
+Copy-Item .\backend\.env.example .\backend\.env
 ```
 
 ### PowerShell activation blocked
