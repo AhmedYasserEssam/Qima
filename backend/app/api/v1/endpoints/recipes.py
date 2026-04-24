@@ -77,3 +77,21 @@ async def discuss_recipe(payload: RecipeDiscussRequest) -> RecipeDiscussResponse
         warnings=["Stub response. Replace with retrieved recipe context later."],
         latency_ms=140,
     )
+
+
+@router.get("/{recipe_id}", response_model=RecipeCandidate)
+async def get_recipe(recipe_id: str) -> RecipeCandidate:
+    return RecipeCandidate(
+        recipe_id=recipe_id,
+        title="Simple Lentil Rice Bowl",
+        match_score=0.88,
+        matched_ingredients=["rice", "lentils"],
+        missing_ingredients=["onion", "tomato sauce"],
+        exclusions=[],
+        warnings=["Mock recipe detail response."],
+        grounding_metadata=GroundingMetadata(
+            retrieved_from="recipe_corpus_primary",
+            matched_count=2,
+            missing_count=2,
+        ),
+    )

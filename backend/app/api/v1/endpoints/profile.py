@@ -39,3 +39,30 @@ async def update_profile(payload: ProfileUpdateRequest) -> ProfileUpdateResponse
             "Stub response. Profile context is not diagnosis or treatment."
         ],
     )
+
+
+@router.get("/{profile_id}", response_model=ProfileUpdateResponse)
+async def get_profile(profile_id: str) -> ProfileUpdateResponse:
+    return ProfileUpdateResponse(
+        profile_id=profile_id,
+        normalized_profile=NormalizedProfile(
+            age_years=30,
+            sex="prefer_not_to_say",
+            height_cm=170,
+            weight_kg=70,
+            activity_level="moderately_active",
+            goal="improve_general_health",
+            allergens=[],
+            dietary_exclusions=[],
+            dietary_preferences=["egyptian_foods"],
+            exclusion_flags=[],
+        ),
+        validation_flags=[],
+        limitation_flags=["guest_or_session_scoped"],
+        support_status=SupportStatus(
+            status="supported",
+            reason="Mock profile loaded for API integration testing.",
+        ),
+        updated_at=datetime.now(UTC),
+        warnings=["Mock response. Profile storage is not implemented yet."],
+    )
