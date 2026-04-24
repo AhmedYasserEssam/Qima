@@ -1,45 +1,50 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 
-from app.schemas.nutrition import NutritionEstimateRequest, NutritionEstimateSuccess
-from app.services.exceptions import NotFoundError, UpstreamUnavailableError
-from app.services.nutrition_service import NutritionService
-
-
-router = APIRouter(prefix="/nutrition", tags=["nutrition"])
-
-
-@router.post(
-    "/estimate",
-    response_model=NutritionEstimateSuccess,
-    status_code=status.HTTP_200_OK,
-    summary="Estimate nutrition for a recognized dish or ingredient set",
+from app.schemas.v1.nutrition import (
+    DataQuality,
+    MatchedDish,
+    Nutrients,
+    NutritionEstimateRequest,
+    NutritionEstimateSuccess,
+    ServingAssumptions,
+    Source,
 )
+
+router = APIRouter()
+
+
+@router.post("/estimate", response_model=NutritionEstimateSuccess)
 async def estimate_nutrition(
     payload: NutritionEstimateRequest,
 ) -> NutritionEstimateSuccess:
-    """
-    POST /v1/nutrition/estimate
+    if payload.recognized_dish:
+        matched_name = payload.recognized_dish
+        match_type = "dish"
+    else:
+        matched_name = ", ".join(payload.ingredients or ["mixed ingredients"])
+        match_type = "ingredient_set"
 
-    Estimates nutrients from either a recognized dish or an ingredient set,
-    using the backend nutrition source hierarchy.
-    """
-    try:
-        return await NutritionService.estimate(payload)
-
-    except NotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
-
-    except UpstreamUnavailableError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(exc),
-        ) from exc
-
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Unexpected nutrition estimation failure.",
-        ) from exc
+    return NutritionEstimateSuccess(
+        matched_dish=MatchedDish(
+            name=matched_name,
+            match_type=match_type,
+            match_id="nutrition_stub_001",
+        ),
+        serving_assumptions=ServingAssumptions(
+            basis=payload.serving_hint or "one typical serving",
+            note="Mock serving assumption for API integration testing.",
+        ),
+        nutrients=Nutrients(
+            calories_kcal=520,
+            protein_g=24,
+            carbohydrates_g=68,
+            fat_g=16,
+            fiber_g=9,
+            sugar_g=6,
+            sodium_mg=430,
+        ),
+        confidence=0.7,
+        source=Source(dataset="egyptian_food_csv", source_type="egyptian_food_dataset"),
+        data_quality=DataQuality(completeness="partial"),
+        warnings=["Mock response. Nutrition values are estimates."],
+    )
