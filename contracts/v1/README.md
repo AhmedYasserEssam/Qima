@@ -1,13 +1,14 @@
 # API Contracts — v1
 
 This directory defines the **public, client-facing API contracts** for the Qima backend.
+
 It is the single source of truth for:
 - request and response schemas
 - error handling structure
 - versioning rules
 - behavioral guarantees and constraints
 
-Clients (Flutter) must rely **only** on what is defined here.
+Clients (Flutter) must rely **only** on what is defined here.  
 The backend may change internally (providers, models, data sources, logic), but **these contracts must remain stable within a version**.
 
 ---
@@ -27,6 +28,14 @@ Each contract fully defines:
 
 No behavior outside these definitions should be assumed by clients.
 
+### Important
+
+These files are **full API contracts**, not raw HTTP body schemas.
+
+For backend validation:
+- validate request bodies against the relevant `$defs` schema
+- example: `#/$defs/PlansGenerateRequest`
+
 ---
 
 ## Contracts Index
@@ -39,6 +48,10 @@ No behavior outside these definitions should be assumed by clients.
 | `recipes_suggest.json` | `/v1/recipes/suggest` | POST |
 | `recipes_discuss.json` | `/v1/recipes/discuss` | POST |
 | `vision_identify.json` | `/v1/vision/identify` | POST |
+| `prices_estimate.json` | `/v1/prices/estimate` | POST |
+| `labs_interpret.json` | `/v1/labs/interpret` | POST |
+| `profile_update.json` | `/v1/profile/update` | POST |
+| `plans_generate.json` | `/v1/plans/generate` | POST |
 | `error_response.json` | shared error schema | — |
 
 ---
@@ -59,8 +72,8 @@ All public endpoints are versioned via path:
 
 ### Non-breaking changes (allowed within version)
 - adding optional fields
-- extending enums (only if clients can safely ignore new values)
-- improving descriptions or documentation
+- extending enums (if safely ignorable)
+- improving documentation
 
 ---
 
@@ -68,15 +81,13 @@ All public endpoints are versioned via path:
 
 Rules:
 - A new version (`/v2`) must be introduced **before** breaking `/v1`
-- `/v1` and `/v2` must run **in parallel** during migration
+- `/v1` and `/v2` must run **in parallel**
 - `/v1` must not be removed without a defined migration window
 
 ### Operational guarantees
-- `/v1` remains supported until all known clients migrate
-- Deprecation must be communicated clearly (release notes, API docs, app updates)
+- `/v1` remains supported until all clients migrate
 - Breaking existing clients is not allowed
-
-If clients cannot upgrade immediately, **the backend must continue supporting the old version**.
+- Backend must continue supporting old versions if clients cannot upgrade
 
 ---
 
@@ -93,41 +104,118 @@ But:
 - **public contract fields must remain stable**
 - **clients must not depend on backend implementation details**
 
-When a field is exposed publicly, it becomes part of the contract and must be treated as stable.
-
 ---
 
-## Profile Resolution Rules
+## Profile Handling Rules
 
 The backend is the **source of truth** for user profile data.
 
-Resolution order:
-1. Stored backend profile (default)
-2. `profile_overrides` in the request (request-scoped only)
-3. System defaults (if no profile exists)
+### `/v1/plans/generate`
 
-Notes:
-- `profile_overrides` apply only to the current request
-- Overrides are **not persisted**
-- Profile resolution details are internal metadata and are not returned in API responses
+Exactly one of the following must be provided:
+- `profile_id` (saved profile)
+- `profile` (inline profile)
+
+Rules:
+- both must NOT be sent together
+- inline profile is request-scoped only
+- stored profile is resolved server-side
+
+---
+
+## Profile Update Behavior
+
+`/v1/profile/update` is an **upsert endpoint**.
+
+Behavior:
+- missing `profile_id` → create new profile
+- invalid/stale `profile_id` → create new profile
+- provided fields → **replace existing values**, not merge
+
+Array behavior:
+- deduplicated
+- treated as **replacement**, not append
+
+---
+
+## Price Estimation Policy
+
+`/v1/prices/estimate` returns **estimated prices only**.
+
+Rules:
+- not real-time prices
+- may vary by:
+  - geography
+  - store
+  - brand
+- must include:
+  - estimate quality
+  - currency
+  - source metadata
+
+---
+
+## Lab Interpretation Safety Policy
+
+`/v1/labs/interpret` is **strictly constrained**.
+
+Allowed:
+- food-based guidance only
+
+Not allowed:
+- diagnosis
+- treatment
+- supplements prescription
+
+Rules:
+- whitelist-based markers
+- must rely on provided reference ranges
+- must return safety flags
+
+---
+
+## Meal Plan Generation Rules
+
+`/v1/plans/generate` is:
+
+- retrieval-first
+- bounded
+- non-clinical
+
+### Budget behavior
+
+- `budget.max_total_cost` → **hard constraint**
+- `dietary_filters: ["budget_friendly"]` → **soft ranking preference**
+
+### Scoring Convention
+
+All scores follow:
+
+- `1.0 = best`
+- `0.0 = worst`
+
+Includes:
+- `target_fit`
+- `cost_fit`
+- `ingredient_match`
+- `safety_score` (higher = safer)
 
 ---
 
 ## Source Metadata Policy
 
-Some endpoints include a `source` object describing where data originated.
+Some endpoints include a `source` object.
 
 Rules:
-- Use **stable identifiers**, not raw file names or vendor strings
-- Represent logical sources, not implementation details
+- use stable identifiers
+- do not expose raw implementation details
 
 ### Important distinction
 
-- `/vision/identify` exposes provider and model identity — vision output is **model-shaped** and results depend on model behavior
-- `/chat/query` hides model identity — output is **fully normalized** and does not require model awareness
+- `/vision/identify` exposes model/provider identity
+- `/chat/query` hides model details
 
-This difference is intentional and must remain consistent across versions.
-Clients must not assume all endpoints expose the same level of source detail.
+This difference is intentional.
 
 ---
 
@@ -146,21 +234,22 @@ All non-200 responses must follow:
   }
 }
 ```
-
-### HTTP status to error.code
+## HTTP Status Mapping
 
 | HTTP Status | error.code           |
-|-------------|----------------------|
-| 400         | BAD_REQUEST          |
-| 401         | UNAUTHORIZED         |
-| 403         | FORBIDDEN            |
-| 404         | NOT_FOUND            |
-| 422         | VALIDATION_ERROR     |
-| 429         | RATE_LIMITED         |
-| 500         | INTERNAL_ERROR       |
-| 503         | UPSTREAM_UNAVAILABLE |
+|------------|----------------------|
+| 400        | BAD_REQUEST          |
+| 401        | UNAUTHORIZED         |
+| 403        | FORBIDDEN            |
+| 404        | NOT_FOUND            |
+| 422        | VALIDATION_ERROR     |
+| 429        | RATE_LIMITED         |
+| 500        | INTERNAL_ERROR       |
+| 503        | UPSTREAM_UNAVAILABLE |
 
-### Expected retryable values
+---
+
+## Retryable Behavior
 
 | error.code           | retryable |
 |----------------------|-----------|
@@ -173,9 +262,11 @@ All non-200 responses must follow:
 | UPSTREAM_UNAVAILABLE | true      |
 | INTERNAL_ERROR       | true      |
 
-### Notes
-- `retryable` is advisory backend guidance, not a guarantee
-- `INTERNAL_ERROR` retries must use backoff — do not retry immediately
-- `error.details` structure is non-contractual unless separately documented in a specific endpoint contract
-- `error.message` is human-readable only — clients must not parse or depend on its content
-- Breaking changes to error semantics require a new API version
+---
+
+## Notes
+
+- `retryable` is advisory only  
+- `error.message` is human-readable and must not be parsed  
+- `error.details` is not guaranteed unless explicitly documented  
+- retries for `INTERNAL_ERROR` must use backoff  

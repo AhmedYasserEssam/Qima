@@ -1,0 +1,525 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/prices_estimate.json",
+  "title": "Prices Estimate API Contract V1",
+  "description": "Contract-first schema for POST /v1/prices/estimate request and response. Estimates ingredient and recipe cost using backend-normalized Egyptian ingredient price data.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["endpoint", "method", "request", "responses"],
+  "properties": {
+    "endpoint": {
+      "const": "/v1/prices/estimate"
+    },
+    "method": {
+      "const": "POST"
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contentType", "body"],
+      "properties": {
+        "contentType": {
+          "const": "application/json"
+        },
+        "body": {
+          "$ref": "#/$defs/PricesEstimateRequest"
+        }
+      }
+    },
+    "responses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["200", "400", "404", "422", "429", "500", "503"],
+      "properties": {
+        "200": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["description", "body"],
+          "properties": {
+            "description": {
+              "const": "Successful price estimate"
+            },
+            "body": {
+              "$ref": "#/$defs/PricesEstimateSuccess"
+            }
+          }
+        },
+        "400": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "404": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "422": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "429": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "500": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "503": { "$ref": "#/$defs/ErrorResponseSpec" }
+      }
+    }
+  },
+  "$defs": {
+    "PricesEstimateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["estimate_type"],
+      "properties": {
+        "estimate_type": {
+          "type": "string",
+          "enum": ["ingredient_list", "recipe_id"],
+          "description": "Defines whether the estimate is based on direct ingredients or a stored recipe candidate."
+        },
+        "ingredients": {
+          "type": "array",
+          "description": "Ingredient list for cost estimation when estimate_type is ingredient_list.",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/RequestedIngredient"
+          }
+        },
+        "recipe_id": {
+          "type": "string",
+          "pattern": "^recipe_[a-zA-Z0-9_\\-]{6,}$",
+          "description": "Backend recipe identifier when estimate_type is recipe_id."
+        },
+        "servings": {
+          "type": ["number", "null"],
+          "minimum": 1,
+          "description": "Optional number of servings used to scale the cost estimate."
+        },
+        "geography": {
+          "type": ["string", "null"],
+          "description": "Optional user or backend geography hint, such as city or market region."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "estimate_type": {
+                "const": "ingredient_list"
+              }
+            },
+            "required": ["estimate_type"]
+          },
+          "then": {
+            "required": ["ingredients"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "estimate_type": {
+                "const": "recipe_id"
+              }
+            },
+            "required": ["estimate_type"]
+          },
+          "then": {
+            "required": ["recipe_id"]
+          }
+        }
+      ]
+    },
+    "RequestedIngredient": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quantity": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "Optional quantity supplied by the user or recipe."
+        },
+        "unit": {
+          "anyOf": [
+            { "$ref": "#/$defs/Unit" },
+            { "type": "null" }
+          ],
+          "description": "Optional canonical unit supplied by the user or recipe."
+        }
+      }
+    },
+    "Unit": {
+        "type": "string",
+        "enum": [
+            "g",
+            "kg",
+            "ml",
+            "l",
+            "piece",
+            "tbsp",
+            "tsp",
+            "cup",
+            "pack",
+            "can",
+            "bunch",
+            "clove",
+            "head"
+        ]
+    },
+    "PricesEstimateSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "estimate_id",
+        "estimate_type",
+        "currency",
+        "item_costs",
+        "total_cost",
+        "estimate_quality",
+        "source",
+        "data_quality"
+      ],
+      "properties": {
+        "estimate_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Backend identifier for the generated price estimate."
+        },
+        "estimate_type": {
+          "type": "string",
+          "enum": ["ingredient_list", "recipe_id"]
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["EGP"]
+        },
+        "item_costs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ItemCost"
+          }
+        },
+        "total_cost": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "Total estimated cost. Null when no usable item costs are available."
+        },
+        "estimate_quality": {
+          "$ref": "#/$defs/EstimateQuality"
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        },
+        "data_quality": {
+          "$ref": "#/$defs/DataQuality"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "ItemCost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requested_name",
+        "matched_name",
+        "quantity",
+        "unit",
+        "normalized_quantity",
+        "normalized_unit",
+        "unit_price",
+        "estimated_cost",
+        "match_quality"
+      ],
+      "properties": {
+        "requested_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "matched_name": {
+          "type": ["string", "null"]
+        },
+        "quantity": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "unit": {
+          "anyOf": [
+            { "$ref": "#/$defs/Unit" },
+            { "type": "null" }
+          ]
+        },
+        "normalized_quantity": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "normalized_unit": {
+          "anyOf": [
+            { "$ref": "#/$defs/Unit" },
+            { "type": "null" }
+          ]
+        },
+        "unit_price": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "estimated_cost": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "match_quality": {
+          "type": "string",
+          "enum": ["exact", "normalized", "assumed", "unmatched"]
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "EstimateQuality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["confidence", "coverage"],
+      "properties": {
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "coverage": {
+          "type": "string",
+          "enum": ["complete", "partial", "unavailable"]
+        }
+      }
+    },
+    "Source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "source_type", "price_date", "fetched_at"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["egyptian_ingredient_price_kb"]
+        },
+        "source_type": {
+          "type": "string",
+          "enum": ["price_dataset"]
+        },
+        "price_date": {
+          "type": ["string", "null"],
+          "format": "date"
+        },
+        "geography": {
+          "type": ["string", "null"]
+        },
+        "fetched_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "DataQuality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completeness", "freshness"],
+      "properties": {
+        "completeness": {
+          "type": "string",
+          "enum": ["complete", "partial"]
+        },
+        "freshness": {
+          "type": "string",
+          "enum": ["fresh", "stale", "unknown"]
+        }
+      }
+    },
+    "ErrorResponseSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "body"],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "body": {
+          "$ref": "contracts/v1/error_response.json"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "endpoint": "/v1/prices/estimate",
+      "method": "POST",
+      "request": {
+        "contentType": "application/json",
+        "body": {
+          "estimate_type": "ingredient_list",
+          "ingredients": [
+            {
+              "name": "rice",
+              "quantity": 500,
+              "unit": "g"
+            },
+            {
+              "name": "lentils",
+              "quantity": 250,
+              "unit": "g"
+            },
+            {
+              "name": "tomato sauce",
+              "quantity": 200,
+              "unit": "g"
+            }
+          ],
+          "servings": 4,
+          "geography": "Cairo"
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful price estimate",
+          "body": {
+            "estimate_id": "price_est_10001",
+            "estimate_type": "ingredient_list",
+            "currency": "EGP",
+            "item_costs": [
+              {
+                "requested_name": "rice",
+                "matched_name": "white rice",
+                "quantity": 500,
+                "unit": "g",
+                "normalized_quantity": 0.5,
+                "normalized_unit": "kg",
+                "unit_price": 35,
+                "estimated_cost": 17.5,
+                "match_quality": "normalized",
+                "assumptions": [
+                  "Converted 500 g to 0.5 kg."
+                ]
+              },
+              {
+                "requested_name": "lentils",
+                "matched_name": "lentils",
+                "quantity": 250,
+                "unit": "g",
+                "normalized_quantity": 0.25,
+                "normalized_unit": "kg",
+                "unit_price": 60,
+                "estimated_cost": 15,
+                "match_quality": "exact",
+                "assumptions": [
+                  "Converted 250 g to 0.25 kg."
+                ]
+              },
+              {
+                "requested_name": "tomato sauce",
+                "matched_name": null,
+                "quantity": 200,
+                "unit": "g",
+                "normalized_quantity": null,
+                "normalized_unit": null,
+                "unit_price": null,
+                "estimated_cost": null,
+                "match_quality": "unmatched",
+                "assumptions": []
+              }
+            ],
+            "total_cost": 32.5,
+            "estimate_quality": {
+              "confidence": 0.72,
+              "coverage": "partial"
+            },
+            "source": {
+              "provider": "egyptian_ingredient_price_kb",
+              "source_type": "price_dataset",
+              "price_date": "2026-04-20",
+              "geography": "Cairo",
+              "fetched_at": "2026-04-24T10:00:00Z"
+            },
+            "data_quality": {
+              "completeness": "partial",
+              "freshness": "fresh"
+            },
+            "warnings": [
+              "Tomato sauce price unavailable; total cost is partial.",
+              "Prices are estimates and may vary by shop, brand, and date."
+            ]
+          }
+        },
+        "400": {
+          "description": "Malformed request or unsupported price estimate input",
+          "body": {
+            "error": {
+              "code": "BAD_REQUEST",
+              "message": "Request is missing a valid price estimate input.",
+              "retryable": false,
+              "request_id": "req_30001",
+              "details": null
+            }
+          }
+        },
+        "404": {
+          "description": "No price data found for supplied input",
+          "body": {
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "No usable price data found for the supplied ingredients or recipe.",
+              "retryable": false,
+              "request_id": "req_30002",
+              "details": null
+            }
+          }
+        },
+        "422": {
+          "description": "Request validation failed",
+          "body": {
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "Request body failed schema validation.",
+              "retryable": false,
+              "request_id": "req_30003",
+              "details": null
+            }
+          }
+        },
+        "429": {
+          "description": "Rate limit exceeded",
+          "body": {
+            "error": {
+              "code": "RATE_LIMITED",
+              "message": "Too many requests. Try again later.",
+              "retryable": true,
+              "request_id": "req_30004",
+              "details": null
+            }
+          }
+        },
+        "500": {
+          "description": "Unexpected internal failure",
+          "body": {
+            "error": {
+              "code": "INTERNAL_ERROR",
+              "message": "Unexpected server error.",
+              "retryable": true,
+              "request_id": "req_30005",
+              "details": null
+            }
+          }
+        },
+        "503": {
+          "description": "Price data source unavailable",
+          "body": {
+            "error": {
+              "code": "UPSTREAM_UNAVAILABLE",
+              "message": "Price estimation source is currently unavailable.",
+              "retryable": true,
+              "request_id": "req_30006",
+              "details": null
+            }
+          }
+        }
+      }
+    }
+  ]
+}
