@@ -11,3 +11,5 @@ __pycache__/
 pytest-cache-files-*/
 .ruff_cache/
 *.log
+.metals/
+.vscode/
