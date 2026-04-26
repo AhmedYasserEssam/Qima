@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "contracts/v1/recipes_discuss.json",
   "title": "Recipe Discuss API Contract V1",
-  "description": "Contract-first schema for POST /v1/recipes/discuss request and response. This endpoint does not expose a numeric confidence field; grounding is represented through grounded_references and structured safety output.",
+  "description": "Contract-first schema for POST /v1/recipes/discuss request and response. This endpoint supports grounded recipe discussion and optional price-aware follow-up using structured price context.",
   "type": "object",
   "additionalProperties": false,
   "required": ["endpoint", "method", "request", "responses"],
@@ -44,24 +44,12 @@
             }
           }
         },
-        "400": {
-          "$ref": "#/$defs/ErrorResponseSpec"
-        },
-        "404": {
-          "$ref": "#/$defs/ErrorResponseSpec"
-        },
-        "422": {
-          "$ref": "#/$defs/ErrorResponseSpec"
-        },
-        "429": {
-          "$ref": "#/$defs/ErrorResponseSpec"
-        },
-        "500": {
-          "$ref": "#/$defs/ErrorResponseSpec"
-        },
-        "503": {
-          "$ref": "#/$defs/ErrorResponseSpec"
-        }
+        "400": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "404": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "422": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "429": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "500": { "$ref": "#/$defs/ErrorResponseSpec" },
+        "503": { "$ref": "#/$defs/ErrorResponseSpec" }
       }
     }
   },
@@ -82,6 +70,11 @@
           "description": "Structured recipe candidate context when no single recipe_id is available.",
           "required": ["title"],
           "properties": {
+            "recipe_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Optional candidate recipe id if already known from recipe suggestion results."
+            },
             "title": {
               "type": "string",
               "minLength": 1
@@ -99,8 +92,41 @@
                 "type": "string",
                 "minLength": 1
               }
+            },
+            "applied_filters": {
+              "type": "array",
+              "description": "Backend-confirmed filters, constraints, and preferences previously applied to this candidate.",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "warnings": {
+              "type": "array",
+              "description": "Warnings previously attached to the recipe candidate.",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "estimated_cost": {
+              "$ref": "shared_price_context.json#/$defs/EstimatedCost"
             }
           }
+        },
+        "price_context": {
+          "$ref": "shared_price_context.json#/$defs/PriceContext"
+        },
+        "conversation_intent": {
+          "type": "string",
+          "description": "Optional client or backend-classified discussion intent.",
+          "enum": [
+            "explain_recipe",
+            "reduce_cost",
+            "substitute_ingredient",
+            "compare_options",
+            "general"
+          ]
         },
         "question": {
           "type": "string",
@@ -110,28 +136,19 @@
         }
       },
       "oneOf": [
-        {
-          "required": ["recipe_id"]
-        },
-        {
-          "required": ["candidate_context"]
-        }
+        { "required": ["recipe_id"] },
+        { "required": ["candidate_context"] }
       ]
     },
     "RecipeDiscussSuccess": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "answer",
-        "grounded_references",
-        "safety_flags",
-        "latency_ms"
-      ],
+      "required": ["answer", "grounded_references", "safety_flags", "latency_ms"],
       "properties": {
         "answer": {
           "type": "string",
           "minLength": 1,
-          "description": "Grounded backend answer derived from retrieved recipe references."
+          "description": "Grounded backend answer derived from retrieved recipe references and optional structured price context."
         },
         "grounded_references": {
           "type": "array",
@@ -141,12 +158,29 @@
             "$ref": "#/$defs/GroundedReference"
           }
         },
+        "price_references": {
+          "type": "array",
+          "description": "Optional price context references used to support cost claims. Required by backend behavior when the answer makes cost or savings claims.",
+          "items": {
+            "$ref": "#/$defs/PriceReference"
+          }
+        },
+        "suggested_substitutions": {
+          "type": "array",
+          "description": "Optional bounded substitutions grounded in recipe context and price context.",
+          "items": {
+            "$ref": "#/$defs/SuggestedSubstitution"
+          }
+        },
+        "updated_estimated_cost": {
+          "$ref": "shared_price_context.json#/$defs/EstimatedCost"
+        },
         "safety_flags": {
           "$ref": "#/$defs/SafetyFlags"
         },
         "warnings": {
           "type": "array",
-          "description": "Optional backend warnings about weak grounding, substitutions, or incomplete context.",
+          "description": "Optional backend warnings about weak grounding, substitutions, incomplete recipe context, or incomplete price context.",
           "items": {
             "type": "string",
             "minLength": 1
@@ -162,12 +196,7 @@
     "GroundedReference": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "recipe_id",
-        "title",
-        "reference_type",
-        "reference_text"
-      ],
+      "required": ["recipe_id", "title", "reference_type", "reference_text"],
       "properties": {
         "recipe_id": {
           "type": "string",
@@ -179,16 +208,108 @@
         },
         "reference_type": {
           "type": "string",
-          "enum": [
-            "ingredient",
-            "instruction",
-            "metadata"
-          ]
+          "enum": ["ingredient", "instruction", "metadata"]
         },
         "reference_text": {
           "type": "string",
           "minLength": 1,
           "description": "Short retrieved recipe snippet used as grounding; not guaranteed to include the full original recipe text."
+        }
+      }
+    },
+    "PriceReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference_type", "label"],
+      "properties": {
+        "reference_type": {
+          "type": "string",
+          "enum": [
+            "estimated_cost",
+            "item_cost",
+            "budget",
+            "price_source",
+            "assumption",
+            "warning"
+          ]
+        },
+        "ingredient_name": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "number",
+          "minimum": 0
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3
+        },
+        "coverage": {
+          "$ref": "shared_price_context.json#/$defs/Coverage"
+        },
+        "source": {
+          "$ref": "shared_price_context.json#/$defs/PriceSource"
+        }
+      }
+    },
+    "SuggestedSubstitution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_ingredient", "to_ingredient", "tradeoffs"],
+      "properties": {
+        "from_ingredient": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to_ingredient": {
+          "type": "string",
+          "minLength": 1
+        },
+        "estimated_savings": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Estimated usage-cost savings when calculable from supplied or refreshed price context."
+        },
+        "estimated_purchase_savings": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Estimated checkout-cost savings when calculable from supplied or refreshed price context."
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3
+        },
+        "savings_estimable": {
+          "type": "boolean",
+          "description": "False when the backend can suggest the substitution but cannot estimate savings from available price context."
+        },
+        "tradeoffs": {
+          "type": "array",
+          "description": "Expected changes in taste, texture, nutrition, dietary suitability, or cooking behavior.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "safety_notes": {
+          "type": "array",
+          "description": "Safety or dietary notes for the proposed substitution.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "price_references": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PriceReference"
+          }
         }
       }
     },
@@ -238,235 +359,5 @@
         }
       }
     }
-  },
-  "examples": [
-    {
-      "endpoint": "/v1/recipes/discuss",
-      "method": "POST",
-      "request": {
-        "contentType": "application/json",
-        "body": {
-          "recipe_id": "recipe_001",
-          "question": "Can I replace butter with olive oil in this recipe?"
-        }
-      },
-      "responses": {
-        "200": {
-          "description": "Successful grounded recipe discussion response",
-          "body": {
-            "answer": "Yes, olive oil can replace butter in this recipe, but the texture and flavor may change slightly. Use a similar amount and add it during the sauté step rather than as a finishing fat.",
-            "grounded_references": [
-              {
-                "recipe_id": "recipe_001",
-                "title": "Tomato Lentil Skillet",
-                "reference_type": "ingredient",
-                "reference_text": "2 tbsp butter"
-              },
-              {
-                "recipe_id": "recipe_001",
-                "title": "Tomato Lentil Skillet",
-                "reference_type": "instruction",
-                "reference_text": "Melt the butter in a skillet, then sauté the onion and garlic."
-              }
-            ],
-            "safety_flags": {
-              "allergen_risk": false,
-              "undercooked_risk": false,
-              "cross_contamination_risk": false,
-              "diet_conflict": false,
-              "notes": []
-            },
-            "warnings": [],
-            "latency_ms": 734
-          }
-        },
-        "400": {
-          "description": "Malformed request or missing discussion context",
-          "body": {
-            "error": {
-              "code": "BAD_REQUEST",
-              "message": "Request must include exactly one of recipe_id or candidate_context, plus a question.",
-              "retryable": false,
-              "request_id": "req_30001"
-            }
-          }
-        },
-        "404": {
-          "description": "Recipe or candidate context not found",
-          "body": {
-            "error": {
-              "code": "NOT_FOUND",
-              "message": "No matching recipe context was found for the supplied discussion request.",
-              "retryable": false,
-              "request_id": "req_30002"
-            }
-          }
-        },
-        "422": {
-          "description": "Request validation failed",
-          "body": {
-            "error": {
-              "code": "VALIDATION_ERROR",
-              "message": "Request body failed schema validation.",
-              "retryable": false,
-              "request_id": "req_30003"
-            }
-          }
-        },
-        "429": {
-          "description": "Rate limit exceeded",
-          "body": {
-            "error": {
-              "code": "RATE_LIMITED",
-              "message": "Too many requests. Try again later.",
-              "retryable": true,
-              "request_id": "req_30004"
-            }
-          }
-        },
-        "500": {
-          "description": "Unexpected internal failure",
-          "body": {
-            "error": {
-              "code": "INTERNAL_ERROR",
-              "message": "Unexpected server error.",
-              "retryable": true,
-              "request_id": "req_30005"
-            }
-          }
-        },
-        "503": {
-          "description": "Recipe discussion service unavailable",
-          "body": {
-            "error": {
-              "code": "UPSTREAM_UNAVAILABLE",
-              "message": "Recipe discussion service is currently unavailable.",
-              "retryable": true,
-              "request_id": "req_30006"
-            }
-          }
-        }
-      }
-    },
-    {
-      "endpoint": "/v1/recipes/discuss",
-      "method": "POST",
-      "request": {
-        "contentType": "application/json",
-        "body": {
-          "candidate_context": {
-            "title": "Creamy Mushroom Pasta",
-            "matched_ingredients": ["mushrooms", "pasta", "garlic"],
-            "missing_ingredients": ["cream", "parmesan"]
-          },
-          "question": "Is this recipe safe for someone with a dairy allergy?"
-        }
-      },
-      "responses": {
-        "200": {
-          "description": "Successful grounded recipe discussion response",
-          "body": {
-            "answer": "Not as written. The recipe context indicates dairy-containing ingredients such as cream and parmesan, so it would conflict with a dairy allergy unless those are replaced with suitable alternatives.",
-            "grounded_references": [
-              {
-                "recipe_id": "recipe_045",
-                "title": "Creamy Mushroom Pasta",
-                "reference_type": "ingredient",
-                "reference_text": "1 cup cream"
-              },
-              {
-                "recipe_id": "recipe_045",
-                "title": "Creamy Mushroom Pasta",
-                "reference_type": "ingredient",
-                "reference_text": "1/2 cup parmesan"
-              },
-              {
-                "recipe_id": "recipe_045",
-                "title": "Creamy Mushroom Pasta",
-                "reference_type": "metadata",
-                "reference_text": "Missing ingredients: cream, parmesan"
-              }
-            ],
-            "safety_flags": {
-              "allergen_risk": true,
-              "undercooked_risk": false,
-              "cross_contamination_risk": false,
-              "diet_conflict": true,
-              "notes": [
-                "Recipe context includes dairy ingredients that may conflict with a dairy allergy."
-              ]
-            },
-            "warnings": [],
-            "latency_ms": 801
-          }
-        },
-        "400": {
-          "description": "Malformed request or missing discussion context",
-          "body": {
-            "error": {
-              "code": "BAD_REQUEST",
-              "message": "Request must include exactly one of recipe_id or candidate_context, plus a question.",
-              "retryable": false,
-              "request_id": "req_30011"
-            }
-          }
-        },
-        "404": {
-          "description": "Recipe or candidate context not found",
-          "body": {
-            "error": {
-              "code": "NOT_FOUND",
-              "message": "No matching recipe context was found for the supplied discussion request.",
-              "retryable": false,
-              "request_id": "req_30012"
-            }
-          }
-        },
-        "422": {
-          "description": "Request validation failed",
-          "body": {
-            "error": {
-              "code": "VALIDATION_ERROR",
-              "message": "Request body failed schema validation.",
-              "retryable": false,
-              "request_id": "req_30013"
-            }
-          }
-        },
-        "429": {
-          "description": "Rate limit exceeded",
-          "body": {
-            "error": {
-              "code": "RATE_LIMITED",
-              "message": "Too many requests. Try again later.",
-              "retryable": true,
-              "request_id": "req_30014"
-            }
-          }
-        },
-        "500": {
-          "description": "Unexpected internal failure",
-          "body": {
-            "error": {
-              "code": "INTERNAL_ERROR",
-              "message": "Unexpected server error.",
-              "retryable": true,
-              "request_id": "req_30015"
-            }
-          }
-        },
-        "503": {
-          "description": "Recipe discussion service unavailable",
-          "body": {
-            "error": {
-              "code": "UPSTREAM_UNAVAILABLE",
-              "message": "Recipe discussion service is currently unavailable.",
-              "retryable": true,
-              "request_id": "req_30016"
-            }
-          }
-        }
-      }
-    }
-  ]
+  }
 }

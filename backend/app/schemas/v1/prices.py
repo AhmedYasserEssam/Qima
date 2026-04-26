@@ -1,117 +1,92 @@
-from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-
-Unit = Literal[
-    "g",
-    "kg",
-    "ml",
-    "l",
-    "piece",
-    "tbsp",
-    "tsp",
-    "cup",
-    "pack",
-    "can",
-    "bunch",
-    "clove",
-    "head",
-]
-
-
-class RequestedIngredient(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = Field(..., min_length=1)
-    quantity: float | None = Field(default=None, ge=0)
-    unit: Unit | None = None
+from app.schemas.v1.shared_price_context import (
+    BudgetPreference,
+    EstimatedCost,
+    PriceBasis,
+    PricePreferences,
+    RequestedIngredient,
+)
 
 
 class PricesEstimateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    estimate_type: Literal["ingredient_list", "recipe_id"]
-    ingredients: list[RequestedIngredient] | None = Field(default=None, min_length=1)
-    recipe_id: str | None = Field(
+    price_basis: PriceBasis
+
+    ingredients: list[RequestedIngredient] | None = Field(default=None)
+    recipe_id: str | None = Field(default=None, min_length=1)
+    recipe_ingredients: list[RequestedIngredient] | None = Field(default=None)
+    pantry: list[RequestedIngredient] = Field(default_factory=list)
+
+    budget: BudgetPreference
+    price_preferences: PricePreferences | None = None
+
+    servings: float | None = Field(
         default=None,
-        pattern=r"^recipe_[a-zA-Z0-9_\-]{6,}$",
+        gt=0,
+        description="Optional number of servings used to scale or report per-serving cost. Supports partial servings such as 0.5.",
     )
-    servings: float | None = Field(default=None, ge=1)
-    geography: str | None = None
+    currency: str = Field(
+        default="EGP",
+        min_length=3,
+        max_length=3,
+        description="Requested currency. v1 does not perform currency conversion.",
+    )
 
     @model_validator(mode="after")
     def validate_estimate_input(self) -> "PricesEstimateRequest":
-        if self.estimate_type == "ingredient_list":
+        if not self.budget.geography:
+            raise ValueError("budget.geography is required for price estimation")
+
+        if self.price_basis == PriceBasis.INGREDIENT_LIST:
             if not self.ingredients:
                 raise ValueError(
-                    "ingredients is required when estimate_type is ingredient_list"
+                    "ingredients is required when price_basis is ingredient_list"
                 )
-            if self.recipe_id is not None:
+            if self.recipe_id is not None or self.recipe_ingredients is not None:
                 raise ValueError(
-                    "recipe_id must not be provided when estimate_type is ingredient_list"
+                    "recipe_id and recipe_ingredients must not be provided when price_basis is ingredient_list"
                 )
 
-        if self.estimate_type == "recipe_id":
+        elif self.price_basis == PriceBasis.RECIPE_ID:
             if not self.recipe_id:
-                raise ValueError("recipe_id is required when estimate_type is recipe_id")
-            if self.ingredients is not None:
+                raise ValueError("recipe_id is required when price_basis is recipe_id")
+            if self.ingredients is not None or self.recipe_ingredients is not None:
                 raise ValueError(
-                    "ingredients must not be provided when estimate_type is recipe_id"
+                    "ingredients and recipe_ingredients must not be provided when price_basis is recipe_id"
+                )
+
+        elif self.price_basis == PriceBasis.RECIPE_INGREDIENTS:
+            if not self.recipe_ingredients:
+                raise ValueError(
+                    "recipe_ingredients is required when price_basis is recipe_ingredients"
+                )
+            if self.ingredients is not None or self.recipe_id is not None:
+                raise ValueError(
+                    "ingredients and recipe_id must not be provided when price_basis is recipe_ingredients"
+                )
+
+        elif self.price_basis == PriceBasis.PANTRY_DELTA:
+            has_price_input = bool(self.ingredients) or bool(self.recipe_ingredients) or bool(
+                self.recipe_id
+            )
+            if not has_price_input:
+                raise ValueError(
+                    "ingredients, recipe_ingredients, or recipe_id is required when price_basis is pantry_delta"
                 )
 
         return self
-
-
-class ItemCost(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    requested_name: str = Field(..., min_length=1)
-    matched_name: str | None
-    quantity: float | None = Field(default=None, ge=0)
-    unit: Unit | None
-    normalized_quantity: float | None = Field(default=None, ge=0)
-    normalized_unit: Unit | None
-    unit_price: float | None = Field(default=None, ge=0)
-    estimated_cost: float | None = Field(default=None, ge=0)
-    match_quality: Literal["exact", "normalized", "assumed", "unmatched"]
-    assumptions: list[str] = Field(default_factory=list)
-
-
-class EstimateQuality(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    confidence: float = Field(..., ge=0, le=1)
-    coverage: Literal["complete", "partial", "unavailable"]
-
-
-class Source(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    provider: Literal["egyptian_ingredient_price_kb"]
-    source_type: Literal["price_dataset"]
-    price_date: date | None
-    geography: str | None = None
-    fetched_at: datetime
-
-
-class DataQuality(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    completeness: Literal["complete", "partial"]
-    freshness: Literal["fresh", "stale", "unknown"]
 
 
 class PricesEstimateResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     estimate_id: str = Field(..., min_length=1)
-    estimate_type: Literal["ingredient_list", "recipe_id"]
-    currency: Literal["EGP"]
-    item_costs: list[ItemCost]
-    total_cost: float | None = Field(default=None, ge=0)
-    estimate_quality: EstimateQuality
-    source: Source
-    data_quality: DataQuality
+    price_basis: PriceBasis
+    recipe_id: str | None = None
+    estimated_cost: EstimatedCost
     warnings: list[str] = Field(default_factory=list)
+    latency_ms: int = Field(..., ge=0)

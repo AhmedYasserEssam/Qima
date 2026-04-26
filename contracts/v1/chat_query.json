@@ -1,208 +1,457 @@
 {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "contracts/v1/chat_query.json",
-    "title": "ChatQueryV1",
-    "type": "object",
-    "additionalProperties": false,
-    "properties": {
-        "endpoint": {
-            "const": "/v1/chat/query"
-        },
-        "method": {
-            "const": "POST"
-        },
-        "request": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-                "context_id",
-                "question"
-            ],
-            "properties": {
-                "context_id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "description": "Opaque backend context or session identifier."
-                },
-                "question": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 2000,
-                    "description": "User question in natural language."
-                },
-                "conversation_turn_id": {
-                    "type": "string",
-                    "description": "Optional client-generated id for tracing and idempotency."
-                },
-                "locale": {
-                    "type": "string",
-                    "description": "Optional BCP-47 locale such as en or ar-EG."
-                },
-                "profile_overrides": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "description": "Optional temporary overrides for guest mode or explicit per-request override. Stored backend profile remains the default source of truth.",
-                    "properties": {
-                        "dietary_preferences": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        },
-                        "allergens": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                },
-                "client_timestamp": {
-                    "type": "string",
-                    "format": "date-time"
-                }
-            }
-        },
-        "response": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-                "answer",
-                "source_references",
-                "safety_flags",
-                "latency_ms"
-            ],
-            "properties": {
-                "answer": {
-                    "type": "string",
-                    "minLength": 1,
-                    "description": "Grounded user-facing response."
-                },
-                "source_references": {
-                    "type": "array",
-                    "minItems": 0,
-                    "description": "Structured grounding references used by the backend to support the answer.",
-                    "items": {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "required": [
-                            "source_id",
-                            "source_type",
-                            "label"
-                        ],
-                        "properties": {
-                            "source_id": {
-                                "type": "string"
-                            },
-                            "source_type": {
-                                "type": "string",
-                                "enum": [
-                                    "open_food_facts",
-                                    "nutrition_dataset",
-                                    "egyptian_food_dataset",
-                                    "fooddata_central",
-                                    "recipe_corpus",
-                                    "comparison_result",
-                                    "session_context",
-                                    "other"
-                                ]
-                            },
-                            "label": {
-                                "type": "string"
-                            },
-                            "excerpt": {
-                                "type": "string"
-                            },
-                            "confidence": {
-                                "type": "number",
-                                "minimum": 0,
-                                "maximum": 1
-                            }
-                        }
-                    }
-                },
-                "safety_flags": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": [
-                        "grounded",
-                        "medical_advice_blocked",
-                        "allergen_caution",
-                        "low_confidence"
-                    ],
-                    "properties": {
-                        "grounded": {
-                            "type": "boolean",
-                            "description": "True only when the answer is supported by at least one backend-approved source reference."
-                        },
-                        "medical_advice_blocked": {
-                            "type": "boolean"
-                        },
-                        "allergen_caution": {
-                            "type": "boolean"
-                        },
-                        "low_confidence": {
-                            "type": "boolean"
-                        },
-                        "notes": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                },
-                "latency_ms": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "description": "Backend end-to-end latency in milliseconds."
-                }
-            }
-        }
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/chat_query.json",
+  "title": "ChatQueryV1",
+  "description": "Contract-first schema for POST /v1/chat/query. Supports grounded general chat, recipe/session context, and optional price-aware food context.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "endpoint": {
+      "const": "/v1/chat/query"
     },
-    "required": [
-        "endpoint",
-        "method",
-        "request",
-        "response"
-    ],
-    "allOf": [
-        {
-            "if": {
-                "properties": {
-                    "response": {
-                        "properties": {
-                            "safety_flags": {
-                                "properties": {
-                                    "grounded": {
-                                        "const": true
-                                    }
-                                },
-                                "required": [
-                                    "grounded"
-                                ]
-                            }
-                        },
-                        "required": [
-                            "safety_flags"
-                        ]
-                    }
-                }
+    "method": {
+      "const": "POST"
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_id", "question"],
+      "properties": {
+        "context_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Opaque backend context or session identifier."
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "User question in natural language."
+        },
+        "active_context_type": {
+          "type": "string",
+          "description": "Optional structured hint describing the active context the user is asking about.",
+          "enum": [
+            "recipe_suggestions",
+            "recipe_discussion",
+            "meal_plan",
+            "scan_result",
+            "general"
+          ]
+        },
+        "food_context": {
+          "$ref": "#/$defs/FoodContext"
+        },
+        "conversation_turn_id": {
+          "type": "string",
+          "description": "Optional client-generated id for tracing and idempotency."
+        },
+        "locale": {
+          "type": "string",
+          "description": "Optional BCP-47 locale such as en or ar-EG."
+        },
+        "profile_overrides": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Optional temporary overrides for guest mode or explicit per-request override. Stored backend profile remains the default source of truth.",
+          "properties": {
+            "dietary_preferences": {
+              "type": "array",
+              "description": "Temporary diet-specific preferences or constraints.",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
             },
-            "then": {
-                "properties": {
-                    "response": {
-                        "properties": {
-                            "source_references": {
-                                "minItems": 1
-                            }
-                        },
-                        "required": [
-                            "source_references"
-                        ]
-                    }
-                }
+            "user_preferences": {
+              "type": "array",
+              "description": "Temporary per-request preferences such as vegan, budget_friendly, high_protein, quick_meal, or cooking for someone else.",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "allergens": {
+              "type": "array",
+              "description": "Temporary allergen constraints for this request.",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
             }
+          }
+        },
+        "client_timestamp": {
+          "type": "string",
+          "format": "date-time"
         }
-    ]
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "answer",
+        "source_references",
+        "safety_flags",
+        "latency_ms"
+      ],
+      "properties": {
+        "answer": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Grounded user-facing response."
+        },
+        "source_references": {
+          "type": "array",
+          "minItems": 0,
+          "description": "Structured grounding references used by the backend to support the answer.",
+          "items": {
+            "$ref": "#/$defs/SourceReference"
+          }
+        },
+        "price_references": {
+          "type": "array",
+          "description": "Optional price context references used when the answer makes cost, budget, or savings claims.",
+          "items": {
+            "$ref": "#/$defs/PriceReference"
+          }
+        },
+        "recommended_recipe_ids": {
+          "type": "array",
+          "description": "Optional recipe ids recommended by the answer when grounded recipe context exists.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "cost_saving_actions": {
+          "type": "array",
+          "description": "Optional grounded cost-saving actions derived from available recipe, pantry, budget, and price context.",
+          "items": {
+            "$ref": "#/$defs/CostSavingAction"
+          }
+        },
+        "safety_flags": {
+          "$ref": "#/$defs/SafetyFlags"
+        },
+        "latency_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Backend end-to-end latency in milliseconds."
+        }
+      }
+    }
+  },
+  "required": [
+    "endpoint",
+    "method",
+    "request",
+    "response"
+  ],
+  "$defs": {
+    "FoodContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Structured food, recipe, pantry, budget, and price context available to ground chat responses.",
+      "properties": {
+        "selected_recipe_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recipes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContextRecipe"
+          }
+        },
+        "pantry": {
+          "type": "array",
+          "items": {
+            "$ref": "shared_price_context.json#/$defs/RequestedIngredient"
+          }
+        },
+        "recognized_ingredients": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "$ref": "shared_price_context.json#/$defs/RequestedIngredient"
+              }
+            ]
+          }
+        },
+        "estimated_costs": {
+          "type": "array",
+          "items": {
+            "$ref": "shared_price_context.json#/$defs/EstimatedCost"
+          }
+        },
+        "budget": {
+          "$ref": "shared_price_context.json#/$defs/BudgetPreference"
+        }
+      }
+    },
+    "ContextRecipe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recipe_id", "title"],
+      "properties": {
+        "recipe_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "matched_ingredients": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "missing_ingredients": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "applied_filters": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "estimated_cost": {
+          "$ref": "shared_price_context.json#/$defs/EstimatedCost"
+        },
+        "price_rank": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "price_explanation": {
+          "type": "string"
+        }
+      }
+    },
+    "SourceReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "source_type",
+        "label"
+      ],
+      "properties": {
+        "source_id": {
+          "type": "string"
+        },
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "open_food_facts",
+            "nutrition_dataset",
+            "egyptian_food_dataset",
+            "fooddata_central",
+            "recipe_corpus",
+            "comparison_result",
+            "session_context",
+            "price_context",
+            "price_dataset",
+            "other"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "excerpt": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "PriceReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference_type", "label"],
+      "properties": {
+        "reference_type": {
+          "type": "string",
+          "enum": [
+            "estimated_cost",
+            "item_cost",
+            "budget",
+            "price_source",
+            "assumption",
+            "warning"
+          ]
+        },
+        "recipe_id": {
+          "type": "string"
+        },
+        "ingredient_name": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "number",
+          "minimum": 0
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3
+        },
+        "coverage": {
+          "$ref": "shared_price_context.json#/$defs/Coverage"
+        },
+        "source": {
+          "$ref": "shared_price_context.json#/$defs/PriceSource"
+        }
+      }
+    },
+    "CostSavingAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action_type", "description"],
+      "properties": {
+        "action_type": {
+          "type": "string",
+          "enum": [
+            "choose_lower_cost_recipe",
+            "use_pantry_item",
+            "replace_ingredient",
+            "remove_optional_ingredient",
+            "reduce_quantity",
+            "request_price_refresh"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recipe_id": {
+          "type": "string"
+        },
+        "from_ingredient": {
+          "type": "string"
+        },
+        "to_ingredient": {
+          "type": "string"
+        },
+        "estimated_savings": {
+          "type": "number",
+          "minimum": 0
+        },
+        "estimated_purchase_savings": {
+          "type": "number",
+          "minimum": 0
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3
+        },
+        "savings_estimable": {
+          "type": "boolean"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "SafetyFlags": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grounded",
+        "medical_advice_blocked",
+        "allergen_caution",
+        "low_confidence"
+      ],
+      "properties": {
+        "grounded": {
+          "type": "boolean",
+          "description": "True only when the answer is supported by at least one backend-approved source reference."
+        },
+        "medical_advice_blocked": {
+          "type": "boolean"
+        },
+        "allergen_caution": {
+          "type": "boolean"
+        },
+        "low_confidence": {
+          "type": "boolean"
+        },
+        "price_context_missing": {
+          "type": "boolean",
+          "description": "True when the user asks a price-sensitive question but usable structured price context is unavailable."
+        },
+        "notes": {
+          "type": "array",
+          "description": "Human-readable notes explaining safety limits, missing context, low confidence, or unavailable price grounding.",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "response": {
+            "properties": {
+              "safety_flags": {
+                "properties": {
+                  "grounded": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "grounded"
+                ]
+              }
+            },
+            "required": [
+              "safety_flags"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "response": {
+            "properties": {
+              "source_references": {
+                "minItems": 1
+              }
+            },
+            "required": [
+              "source_references"
+            ]
+          }
+        }
+      }
+    }
+  ]
 }

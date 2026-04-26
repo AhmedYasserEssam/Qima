@@ -4,6 +4,12 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from app.schemas.v1.shared_price_context import (
+    BudgetPreference,
+    EstimatedCost,
+    RequestedIngredient,
+)
+
 
 class StrictBaseModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -33,22 +39,6 @@ class Goal(str, Enum):
     GAIN_MUSCLE = "gain_muscle"
     MAINTAIN_WEIGHT = "maintain_weight"
     IMPROVE_GENERAL_HEALTH = "improve_general_health"
-
-
-class Unit(str, Enum):
-    G = "g"
-    KG = "kg"
-    ML = "ml"
-    L = "l"
-    PIECE = "piece"
-    TBSP = "tbsp"
-    TSP = "tsp"
-    CUP = "cup"
-    PACK = "pack"
-    CAN = "can"
-    BUNCH = "bunch"
-    CLOVE = "clove"
-    HEAD = "head"
 
 
 class Allergen(str, Enum):
@@ -128,16 +118,6 @@ class MealType(str, Enum):
     UNSPECIFIED = "unspecified"
 
 
-class Currency(str, Enum):
-    EGP = "EGP"
-
-
-class EstimateQuality(str, Enum):
-    COMPLETE = "complete"
-    PARTIAL = "partial"
-    UNAVAILABLE = "unavailable"
-
-
 class MealSourceType(str, Enum):
     RECIPE_CORPUS = "recipe_corpus"
     NUTRITION_DATASET = "nutrition_dataset"
@@ -180,18 +160,6 @@ class Profile(StrictBaseModel):
     exclusion_flags: list[ExclusionFlag] = Field(default_factory=list)
 
 
-class PantryItem(StrictBaseModel):
-    name: NonEmptyString
-    quantity: float | None = Field(default=None, ge=0)
-    unit: Unit | None = None
-
-
-class BudgetConstraint(StrictBaseModel):
-    max_total_cost: float | None = Field(default=None, ge=0)
-    currency: Currency
-    geography: str | None = None
-
-
 class PlanPreferences(StrictBaseModel):
     meal_count: int | None = Field(default=None, ge=1, le=6)
     include_snacks: bool | None = None
@@ -201,8 +169,10 @@ class PlanPreferences(StrictBaseModel):
 class PlansGenerateRequest(StrictBaseModel):
     profile_id: ProfileId | None = None
     profile: Profile | None = None
-    pantry: list[PantryItem] | None = None
-    budget: BudgetConstraint | None = None
+
+    pantry: list[RequestedIngredient] | None = None
+    budget: BudgetPreference | None = None
+
     dietary_filters: list[DietaryFilter] = Field(default_factory=list)
     plan_preferences: PlanPreferences | None = None
 
@@ -223,24 +193,18 @@ class SupportStatus(StrictBaseModel):
 
 
 class NutritionTargets(StrictBaseModel):
-    calories_kcal: float | None = Field(ge=0)
-    protein_g: float | None = Field(ge=0)
-    carbohydrates_g: float | None = Field(ge=0)
-    fat_g: float | None = Field(ge=0)
+    calories_kcal: float | None = Field(default=None, ge=0)
+    protein_g: float | None = Field(default=None, ge=0)
+    carbohydrates_g: float | None = Field(default=None, ge=0)
+    fat_g: float | None = Field(default=None, ge=0)
     target_basis: TargetBasis
 
 
 class EstimatedNutrition(StrictBaseModel):
-    calories_kcal: float | None = Field(ge=0)
-    protein_g: float | None = Field(ge=0)
-    carbohydrates_g: float | None = Field(ge=0)
-    fat_g: float | None = Field(ge=0)
-
-
-class EstimatedCost(StrictBaseModel):
-    total_cost: float | None = Field(ge=0)
-    currency: Currency
-    estimate_quality: EstimateQuality
+    calories_kcal: float | None = Field(default=None, ge=0)
+    protein_g: float | None = Field(default=None, ge=0)
+    carbohydrates_g: float | None = Field(default=None, ge=0)
+    fat_g: float | None = Field(default=None, ge=0)
 
 
 class MealScore(StrictBaseModel):

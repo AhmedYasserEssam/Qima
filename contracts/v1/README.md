@@ -52,6 +52,7 @@ For backend validation:
 | `labs_interpret.json` | `/v1/labs/interpret` | POST |
 | `profile_update.json` | `/v1/profile/update` | POST |
 | `plans_generate.json` | `/v1/plans/generate` | POST |
+| `shared_price_context.json` | shared price schemas | — |
 | `error_response.json` | shared error schema | — |
 
 ---
@@ -77,28 +78,15 @@ All public endpoints are versioned via path:
 
 ---
 
-## Deprecation Policy
-
-Rules:
-- A new version (`/v2`) must be introduced **before** breaking `/v1`
-- `/v1` and `/v2` must run **in parallel**
-- `/v1` must not be removed without a defined migration window
-
-### Operational guarantees
-- `/v1` remains supported until all clients migrate
-- Breaking existing clients is not allowed
-- Backend must continue supporting old versions if clients cannot upgrade
-
----
-
 ## Stability Principle
 
-The backend **owns normalization and abstraction**.
+The backend **owns normalization, orchestration, and abstraction**.
 
 This means:
 - providers may change
 - datasets may change
 - models may change
+- pricing sources may change
 
 But:
 - **public contract fields must remain stable**
@@ -106,35 +94,101 @@ But:
 
 ---
 
-## Profile Handling Rules
+## Recipe Suggestion Rules
 
-The backend is the **source of truth** for user profile data.
+`/v1/recipes/suggest` is:
 
-### `/v1/plans/generate`
+- retrieval-first (no free-form generation)
+- ranked by backend logic
+- optionally price-aware
 
-Exactly one of the following must be provided:
-- `profile_id` (saved profile)
-- `profile` (inline profile)
+### Input Model
 
-Rules:
-- both must NOT be sent together
-- inline profile is request-scoped only
-- stored profile is resolved server-side
+- `user_preferences` replaces `dietary_filters`
+- `excluded_ingredients` are **hard constraints**
+- `budget` is optional
+- `price_preferences` controls price-aware ranking
+
+### Ranking Behavior
+
+- retrieval match is primary signal
+- price is a **secondary ranking signal**
+- backend may ignore price when:
+  - coverage is low
+  - confidence is insufficient
+
+### Output Model
+
+Each recipe candidate may include:
+- `estimated_cost`
+- `price_rank`
+- `price_explanation`
+- `applied_filters` (final constraints used)
 
 ---
 
-## Profile Update Behavior
+## Recipe Discussion Rules
 
-`/v1/profile/update` is an **upsert endpoint**.
+`/v1/recipes/discuss` is:
 
-Behavior:
-- missing `profile_id` → create new profile
-- invalid/stale `profile_id` → create new profile
-- provided fields → **replace existing values**, not merge
+- strictly grounded in recipe context
+- optionally enriched with price context
 
-Array behavior:
-- deduplicated
-- treated as **replacement**, not append
+### Constraints
+
+- must include `recipe_id` OR `candidate_context`
+- must include at least one `grounded_reference`
+- must NOT hallucinate missing recipe facts
+
+### Price-Aware Behavior
+
+If cost is discussed:
+- must use `price_context` or existing `estimated_cost`
+- must return:
+  - `price_references`
+  - `suggested_substitutions` (if applicable)
+  - `updated_estimated_cost` (if recomputed)
+
+If price cannot be computed:
+- must explicitly say so
+- must not estimate blindly
+
+---
+
+## Chat Query Rules
+
+`/v1/chat/query` is:
+
+- general-purpose
+- multi-context aware
+- optionally price-aware
+
+### Context Model
+
+Supports:
+- `food_context`
+- `active_context_type`
+
+### Price-Aware Behavior
+
+If the user asks about:
+- cost
+- savings
+- budget
+
+Then:
+- must use structured price context
+- must return `price_references`
+- must NOT infer price without data
+
+If price context is missing:
+- set `safety_flags.price_context_missing = true`
+
+### Output Additions
+
+May include:
+- `recommended_recipe_ids`
+- `cost_saving_actions`
 
 ---
 
@@ -143,79 +197,58 @@ Array behavior:
 `/v1/prices/estimate` returns **estimated prices only**.
 
 Rules:
-- not real-time prices
-- may vary by:
-  - geography
-  - store
-  - brand
+- not real-time
+- may vary by geography, store, brand
 - must include:
-  - estimate quality
-  - currency
-  - source metadata
+  - `coverage`
+  - `confidence`
+  - `assumptions`
+  - `warnings`
+  - `source`
+
+### Cost Types
+
+The system distinguishes:
+
+- **usage cost** → cost of ingredients used
+- **purchase cost** → cost to buy packages
+
+Both may be present.
 
 ---
 
-## Lab Interpretation Safety Policy
-
-`/v1/labs/interpret` is **strictly constrained**.
-
-Allowed:
-- food-based guidance only
-
-Not allowed:
-- diagnosis
-- treatment
-- supplements prescription
-
-Rules:
-- whitelist-based markers
-- must rely on provided reference ranges
-- must return safety flags
-
----
-
-## Meal Plan Generation Rules
-
-`/v1/plans/generate` is:
-
-- retrieval-first
-- bounded
-- non-clinical
-
-### Budget behavior
+## Budget Rules
 
 - `budget.max_total_cost` → **hard constraint**
-- `dietary_filters: ["budget_friendly"]` → **soft ranking preference**
+- `user_preferences: ["budget_friendly"]` → **soft preference**
 
-### Scoring Convention
+---
 
-All scores follow:
+## Profile Overrides
 
-- `1.0 = best`
-- `0.0 = worst`
+`profile_overrides` allows temporary preferences:
 
-Includes:
-- `target_fit`
-- `cost_fit`
-- `ingredient_match`
-- `safety_score` (higher = safer)
+- `dietary_preferences`
+- `user_preferences`
+- `allergens`
+
+These do NOT modify stored profile data.
 
 ---
 
 ## Source Metadata Policy
 
-Some endpoints include a `source` object.
+Sources must be explicit and structured.
+
+Examples:
+- `recipe_corpus`
+- `nutrition_dataset`
+- `price_context`
+- `price_dataset`
 
 Rules:
-- use stable identifiers
-- do not expose raw implementation details
-
-### Important distinction
-
-- `/vision/identify` exposes model/provider identity
-- `/chat/query` hides model details
-
-This difference is intentional.
+- no hidden providers
+- no implicit sources
 
 ---
 

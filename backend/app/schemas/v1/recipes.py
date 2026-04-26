@@ -2,21 +2,37 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.v1.shared_price_context import (
+    BudgetPreference,
+    Coverage,
+    EstimatedCost,
+    PriceContext,
+    PricePreferences,
+    PriceSource,
+    RequestedIngredient,
+)
+
 
 class RecipeSuggestRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     pantry_items: list[str] | None = None
-    recognized_ingredients: list[str] | None = None
-    dietary_filters: list[str] = Field(default_factory=list)
+    pantry: list[RequestedIngredient] | None = None
+    recognized_ingredients: list[str | RequestedIngredient] | None = None
+
+    user_preferences: list[str] = Field(default_factory=list)
     excluded_ingredients: list[str] = Field(default_factory=list)
+
+    budget: BudgetPreference | None = None
+    price_preferences: PricePreferences | None = None
+
     max_results: int | None = Field(default=None, ge=1, le=20)
 
     @model_validator(mode="after")
     def validate_recipe_input(self) -> "RecipeSuggestRequest":
-        if not self.pantry_items and not self.recognized_ingredients:
+        if not self.pantry_items and not self.pantry and not self.recognized_ingredients:
             raise ValueError(
-                "pantry_items or recognized_ingredients is required"
+                "pantry_items, pantry, or recognized_ingredients is required"
             )
         return self
 
@@ -35,10 +51,17 @@ class RecipeCandidate(BaseModel):
     recipe_id: str = Field(..., min_length=1)
     title: str = Field(..., min_length=1)
     match_score: float = Field(..., ge=0, le=1)
+
     matched_ingredients: list[str] = Field(default_factory=list)
     missing_ingredients: list[str] = Field(default_factory=list)
-    exclusions: list[str] = Field(default_factory=list)
+    applied_filters: list[str] = Field(default_factory=list)
+
     warnings: list[str] = Field(default_factory=list)
+
+    estimated_cost: EstimatedCost | None = None
+    price_rank: int | None = Field(default=None, ge=1)
+    price_explanation: str | None = None
+
     grounding_metadata: GroundingMetadata
 
 
@@ -61,9 +84,23 @@ class RecipeSuggestResponse(BaseModel):
 class CandidateContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    recipe_id: str | None = Field(default=None, min_length=1)
     title: str = Field(..., min_length=1)
+
     matched_ingredients: list[str] = Field(default_factory=list)
     missing_ingredients: list[str] = Field(default_factory=list)
+    applied_filters: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+    estimated_cost: EstimatedCost | None = None
+
+
+class ConversationIntent(str):
+    EXPLAIN_RECIPE = "explain_recipe"
+    REDUCE_COST = "reduce_cost"
+    SUBSTITUTE_INGREDIENT = "substitute_ingredient"
+    COMPARE_OPTIONS = "compare_options"
+    GENERAL = "general"
 
 
 class RecipeDiscussRequest(BaseModel):
@@ -71,6 +108,16 @@ class RecipeDiscussRequest(BaseModel):
 
     recipe_id: str | None = Field(default=None, min_length=1)
     candidate_context: CandidateContext | None = None
+
+    price_context: PriceContext | None = None
+    conversation_intent: Literal[
+        "explain_recipe",
+        "reduce_cost",
+        "substitute_ingredient",
+        "compare_options",
+        "general",
+    ] | None = None
+
     question: str = Field(..., min_length=1, max_length=2000)
 
     @model_validator(mode="after")
@@ -95,6 +142,41 @@ class GroundedReference(BaseModel):
     reference_text: str = Field(..., min_length=1)
 
 
+class PriceReference(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reference_type: Literal[
+        "estimated_cost",
+        "item_cost",
+        "budget",
+        "price_source",
+        "assumption",
+        "warning",
+    ]
+    ingredient_name: str | None = None
+    label: str = Field(..., min_length=1)
+    value: float | None = Field(default=None, ge=0)
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
+    coverage: Coverage | None = None
+    source: PriceSource | None = None
+
+
+class SuggestedSubstitution(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    from_ingredient: str = Field(..., min_length=1)
+    to_ingredient: str = Field(..., min_length=1)
+
+    estimated_savings: float | None = Field(default=None, ge=0)
+    estimated_purchase_savings: float | None = Field(default=None, ge=0)
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
+    savings_estimable: bool | None = None
+
+    tradeoffs: list[str] = Field(default_factory=list)
+    safety_notes: list[str] = Field(default_factory=list)
+    price_references: list[PriceReference] = Field(default_factory=list)
+
+
 class SafetyFlags(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -110,6 +192,11 @@ class RecipeDiscussResponse(BaseModel):
 
     answer: str = Field(..., min_length=1)
     grounded_references: list[GroundedReference] = Field(..., min_length=1)
+
+    price_references: list[PriceReference] = Field(default_factory=list)
+    suggested_substitutions: list[SuggestedSubstitution] = Field(default_factory=list)
+    updated_estimated_cost: EstimatedCost | None = None
+
     safety_flags: SafetyFlags
     warnings: list[str] = Field(default_factory=list)
     latency_ms: int = Field(..., ge=0)

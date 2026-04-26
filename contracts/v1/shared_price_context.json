@@ -1,0 +1,368 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/shared_price_context.json",
+  "title": "SharedPriceContextV1",
+  "description": "Shared reusable price, budget, and cost-estimation definitions for Qima v1 contracts.",
+  "$defs": {
+    "PriceBasis": {
+      "type": "string",
+      "enum": [
+        "ingredient_list",
+        "recipe_ingredients",
+        "pantry_delta",
+        "recipe_id"
+      ]
+    },
+    "Coverage": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "partial",
+        "unavailable"
+      ]
+    },
+    "MatchQuality": {
+      "type": "string",
+      "enum": [
+        "exact",
+        "normalized",
+        "assumed",
+        "unmatched"
+      ]
+    },
+    "RequestedIngredient": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional stable client or backend id used to link requested ingredients to item-level cost rows."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quantity": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1,
+          "examples": [
+            "g",
+            "kg",
+            "ml",
+            "piece",
+            "cup",
+            "tbsp"
+          ]
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "PriceSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "type": "string"
+        },
+        "source_name": {
+          "type": "string"
+        },
+        "geography": {
+          "type": "string",
+          "examples": [
+            "Cairo",
+            "Egypt"
+          ]
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date",
+          "description": "Date when the price was observed."
+        },
+        "last_updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the backend price record was last updated."
+        },
+        "price_basis": {
+          "$ref": "#/$defs/PriceBasis"
+        }
+      }
+    },
+    "ItemCost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ingredient_name",
+        "currency",
+        "match_quality"
+      ],
+      "properties": {
+        "requested_item_id": {
+          "type": "string",
+          "description": "Optional link to RequestedIngredient.id. Prefer this over name matching when available."
+        },
+        "ingredient_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "normalized_name": {
+          "type": "string"
+        },
+        "requested_quantity": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "requested_unit": {
+          "type": "string"
+        },
+        "usage_cost": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Estimated pro-rated cost of the quantity actually used by the recipe or meal."
+        },
+        "purchase_cost": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Estimated checkout cost required to buy the purchasable package or unit."
+        },
+        "purchase_quantity": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Quantity of the purchasable package or unit used to estimate purchase_cost."
+        },
+        "purchase_unit": {
+          "type": "string",
+          "description": "Unit of the purchasable package or unit used to estimate purchase_cost."
+        },
+        "estimated_cost": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Backward-compatible item-level estimated cost. Prefer usage_cost and purchase_cost when both are available."
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3,
+          "examples": [
+            "EGP"
+          ]
+        },
+        "match_quality": {
+          "$ref": "#/$defs/MatchQuality"
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "source": {
+          "$ref": "#/$defs/PriceSource"
+        }
+      }
+    },
+    "EstimateQuality": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "priced_item_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unpriced_item_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "staleness_warning": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "EstimatedCost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "currency",
+        "coverage"
+      ],
+      "properties": {
+        "total_cost": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Estimated total usage cost for the requested ingredients, recipe, or meal."
+        },
+        "total_purchase_cost": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Estimated total checkout cost if the user must buy full purchasable units."
+        },
+        "pantry_delta_cost": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Estimated usage cost for missing ingredients after treating pantry items as already owned."
+        },
+        "pantry_delta_purchase_cost": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Estimated checkout cost for missing purchasable units after treating pantry items as already owned."
+        },
+        "per_serving_cost": {
+          "type": "number",
+          "minimum": 0
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3,
+          "examples": [
+            "EGP"
+          ]
+        },
+        "coverage": {
+          "$ref": "#/$defs/Coverage"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "quality": {
+          "$ref": "#/$defs/EstimateQuality"
+        },
+        "item_costs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ItemCost"
+          },
+          "default": []
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "source": {
+          "$ref": "#/$defs/PriceSource"
+        }
+      }
+    },
+    "BudgetPreference": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_total_cost": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Maximum allowed estimated usage cost."
+        },
+        "max_total_purchase_cost": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Maximum allowed estimated checkout cost."
+        },
+        "max_per_serving_cost": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3,
+          "default": "EGP"
+        },
+        "geography": {
+          "type": "string",
+          "examples": [
+            "Cairo"
+          ]
+        }
+      }
+    },
+    "PricePreferences": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "price_aware": {
+          "type": "boolean",
+          "default": false
+        },
+        "ranking_mode": {
+          "type": "string",
+          "enum": [
+            "best_match",
+            "budget_friendly",
+            "lowest_cost",
+            "cost_per_protein",
+            "balanced"
+          ],
+          "default": "best_match"
+        },
+        "include_item_costs": {
+          "type": "boolean",
+          "default": false
+        },
+        "use_pantry_as_owned": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "PriceContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "price_basis": {
+          "$ref": "#/$defs/PriceBasis"
+        },
+        "ingredients": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RequestedIngredient"
+          },
+          "default": []
+        },
+        "estimated_cost": {
+          "$ref": "#/$defs/EstimatedCost"
+        },
+        "budget": {
+          "$ref": "#/$defs/BudgetPreference"
+        },
+        "price_preferences": {
+          "$ref": "#/$defs/PricePreferences"
+        },
+        "source": {
+          "$ref": "#/$defs/PriceSource"
+        }
+      }
+    }
+  }
+}

@@ -21,23 +21,78 @@ def test_v1_post_endpoints_return_mock_responses() -> None:
             "/v1/nutrition/estimate",
             {"input_type": "recognized_dish", "recognized_dish": "koshari"},
         ),
-        ("post", "/v1/recipes/suggest", {"pantry_items": ["rice", "lentils"]}),
+        (
+            "post",
+            "/v1/recipes/suggest",
+            {
+                "pantry_items": ["rice", "lentils"],
+                "user_preferences": ["budget_friendly"],
+                "price_preferences": {
+                    "price_aware": True,
+                    "ranking_mode": "budget_friendly",
+                    "include_item_costs": True,
+                    "use_pantry_as_owned": True,
+                },
+            },
+        ),
         (
             "post",
             "/v1/recipes/discuss",
-            {"recipe_id": "recipe_stub_001", "question": "How do I prepare it?"},
+            {
+                "recipe_id": "recipe_stub_001",
+                "question": "How do I make it cheaper?",
+                "conversation_intent": "reduce_cost",
+            },
         ),
         (
             "post",
             "/v1/chat/query",
-            {"context_id": "ctx_stub_001", "question": "Is this meal balanced?"},
+            {
+                "context_id": "ctx_stub_001",
+                "question": "Can you make this cheaper?",
+                "active_context_type": "recipe_suggestions",
+                "food_context": {
+                    "selected_recipe_id": "recipe_stub_001",
+                    "recipes": [
+                        {
+                            "recipe_id": "recipe_stub_001",
+                            "title": "Simple Lentil Rice Bowl",
+                            "matched_ingredients": ["rice", "lentils"],
+                            "missing_ingredients": ["onion", "tomato sauce"],
+                            "applied_filters": ["budget_friendly"],
+                            "estimated_cost": {
+                                "total_cost": 24.5,
+                                "currency": "EGP",
+                                "coverage": "partial",
+                                "confidence": 0.72,
+                            },
+                        }
+                    ],
+                    "budget": {
+                        "max_total_cost": 60,
+                        "currency": "EGP",
+                        "geography": "Cairo",
+                    },
+                },
+            },
         ),
         (
             "post",
             "/v1/prices/estimate",
             {
-                "estimate_type": "ingredient_list",
-                "ingredients": [{"name": "rice", "quantity": 500, "unit": "g"}],
+                "price_basis": "ingredient_list",
+                "ingredients": [
+                    {
+                        "id": "ing_001",
+                        "name": "rice",
+                        "quantity": 500,
+                        "unit": "g",
+                    }
+                ],
+                "budget": {
+                    "currency": "EGP",
+                    "geography": "Cairo",
+                },
             },
         ),
         (
@@ -73,7 +128,26 @@ def test_v1_post_endpoints_return_mock_responses() -> None:
                     "weight_kg": 70,
                     "activity_level": "moderately_active",
                     "goal": "improve_general_health",
-                }
+                },
+                "pantry": [
+                    {
+                        "id": "ing_001",
+                        "name": "rice",
+                        "quantity": 500,
+                        "unit": "g",
+                    },
+                    {
+                        "id": "ing_002",
+                        "name": "lentils",
+                        "quantity": 250,
+                        "unit": "g",
+                    },
+                ],
+                "budget": {
+                    "currency": "EGP",
+                    "geography": "Cairo",
+                },
+                "dietary_filters": ["budget_friendly"],
             },
         ),
     ]

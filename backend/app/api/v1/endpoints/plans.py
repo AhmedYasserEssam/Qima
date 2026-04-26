@@ -4,7 +4,6 @@ from fastapi import APIRouter
 
 from app.schemas.v1.plans import (
     DataQuality,
-    EstimatedCost,
     EstimatedNutrition,
     MealCandidate,
     MealScore,
@@ -14,6 +13,13 @@ from app.schemas.v1.plans import (
     PlansGenerateSuccess,
     Source,
     SupportStatus,
+)
+from app.schemas.v1.shared_price_context import (
+    Coverage,
+    EstimatedCost,
+    EstimateQuality,
+    PriceBasis,
+    PriceSource,
 )
 
 router = APIRouter()
@@ -69,7 +75,27 @@ def _mock_plan_response(
                 estimated_cost=EstimatedCost(
                     total_cost=75,
                     currency="EGP",
-                    estimate_quality="partial",
+                    coverage=Coverage.PARTIAL,
+                    confidence=0.72,
+                    quality=EstimateQuality(
+                        priced_item_count=2,
+                        unpriced_item_count=1,
+                        staleness_warning=False,
+                    ),
+                    assumptions=[
+                        "Mock cost uses estimated ingredient prices, not live market prices."
+                    ],
+                    warnings=[
+                        "Cost estimate is partial because some ingredient prices are unavailable."
+                    ],
+                    source=PriceSource(
+                        source_id="egyptian_ingredient_price_kb",
+                        source_name="Egyptian ingredient price knowledge base",
+                        geography="Cairo",
+                        observed_at=datetime.now(UTC).date(),
+                        last_updated_at=datetime.now(UTC),
+                        price_basis=PriceBasis.RECIPE_INGREDIENTS,
+                    ),
                 ),
                 score=MealScore(
                     overall=0.82,
