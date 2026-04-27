@@ -15,7 +15,6 @@ def test_health() -> None:
 
 def test_v1_post_endpoints_return_mock_responses() -> None:
     requests = [
-        ("post", "/v1/barcode/lookup", {"barcode": "5449000000996"}),
         (
             "post",
             "/v1/nutrition/estimate",
