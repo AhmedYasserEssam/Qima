@@ -1,56 +1,68 @@
-from datetime import UTC, datetime
+from uuid import uuid4
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from app.schemas.v1.barcode import (
-    Allergen,
     BarcodeLookupRequest,
     BarcodeLookupSuccess,
-    DataQuality,
-    Ingredient,
-    Nutrition,
-    NutritionValues,
-    Source,
 )
+from app.schemas.v1.error import ErrorBody, ErrorCode, ErrorResponse
+from app.services.barcode_service import lookup_barcode
+from app.services.exceptions import NotFoundError, UpstreamUnavailableError
 
 router = APIRouter()
 
 
-@router.post("/lookup", response_model=BarcodeLookupSuccess)
-async def lookup_barcode(payload: BarcodeLookupRequest) -> BarcodeLookupSuccess:
-    return BarcodeLookupSuccess(
-        product_id=f"off:{payload.barcode}",
-        name="Mock Whole Grain Cereal",
-        brand="Qima Mock Foods",
-        nutrition=Nutrition(
-            basis="per_100g",
-            serving_size="40 g",
-            values=NutritionValues(
-                energy_kcal=380,
-                protein_g=9,
-                carbohydrates_g=72,
-                fat_g=5,
-                sugars_g=12,
-                fiber_g=8,
-                sodium_mg=220,
-                salt_g=0.55,
-            ),
-        ),
-        ingredients=[
-            Ingredient(
-                text="Whole grain wheat",
-                normalized_text="whole grain wheat",
-                is_allergen=True,
-            ),
-            Ingredient(text="Sugar", normalized_text="sugar", is_allergen=False),
-        ],
-        allergens=[
-            Allergen(name="wheat", severity="contains", source_text="Whole grain wheat")
-        ],
-        source=Source(
-            provider="open_food_facts",
-            provider_product_id=payload.barcode,
-            fetched_at=datetime.now(UTC),
-        ),
-        data_quality=DataQuality(completeness="partial"),
+@router.post(
+    "/lookup",
+    response_model=BarcodeLookupSuccess,
+    responses={
+        404: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+)
+async def lookup_barcode_endpoint(
+    payload: BarcodeLookupRequest,
+) -> BarcodeLookupSuccess | JSONResponse:
+    try:
+        return await lookup_barcode(payload.barcode)
+    except NotFoundError:
+        return _error_response(
+            status_code=404,
+            code=ErrorCode.NOT_FOUND,
+            message="No product found for the supplied barcode.",
+            retryable=False,
+            details={"barcode": payload.barcode},
+        )
+    except UpstreamUnavailableError:
+        return _error_response(
+            status_code=503,
+            code=ErrorCode.UPSTREAM_UNAVAILABLE,
+            message="Barcode provider is currently unavailable.",
+            retryable=True,
+            details=None,
+        )
+
+
+def _error_response(
+    *,
+    status_code: int,
+    code: ErrorCode,
+    message: str,
+    retryable: bool,
+    details: dict | None,
+) -> JSONResponse:
+    payload = ErrorResponse(
+        error=ErrorBody(
+            code=code,
+            message=message,
+            retryable=retryable,
+            request_id=f"req_{uuid4().hex[:12]}",
+            details=details,
+        )
+    )
+    return JSONResponse(
+        status_code=status_code,
+        content=payload.model_dump(mode="json"),
     )

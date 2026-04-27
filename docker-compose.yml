@@ -1,0 +1,26 @@
+services:
+  db:
+    image: postgres:16
+    container_name: qima_postgres
+    environment:
+      POSTGRES_DB: qima
+      POSTGRES_USER: qima_user
+      POSTGRES_PASSWORD: qima_password
+    ports:
+      - "15432:5432"
+    volumes:
+      - qima_postgres_data:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: qima_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@qima.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+
+volumes:
+  qima_postgres_data:
