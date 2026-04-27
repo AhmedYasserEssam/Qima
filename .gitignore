@@ -11,3 +11,23 @@ __pycache__/
 pytest-cache-files-*/
 .ruff_cache/
 *.log
+
+# IDE/editor
+.idea/
+.vscode/
+
+# Flutter / Dart (mobile app)
+mobile/build/
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/.pub-cache/
+mobile/android/local.properties
+mobile/ios/Flutter/ephemeral/
+mobile/ios/Flutter/flutter_export_environment.sh
+mobile/ios/Flutter/Generated.xcconfig
+mobile/ios/Runner/GeneratedPluginRegistrant.h
+mobile/ios/Runner/GeneratedPluginRegistrant.m
+mobile/macos/Flutter/ephemeral/
+mobile/windows/flutter/ephemeral/
