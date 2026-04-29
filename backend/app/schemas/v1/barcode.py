@@ -29,6 +29,7 @@ class AllergenSeverity(str, Enum):
 
 class SourceProvider(str, Enum):
     OPEN_FOOD_FACTS = "open_food_facts"
+    CARREFOUR_EGYPT = "carrefour_egypt"
 
 
 class DataCompleteness(str, Enum):
@@ -53,10 +54,21 @@ class NutritionValues(StrictBaseModel):
     salt_g: float | None = None
 
 
+class NutritionFact(StrictBaseModel):
+    key: Annotated[str, StringConstraints(min_length=1)]
+    label: Annotated[str, StringConstraints(min_length=1)]
+    value: float
+    unit: Annotated[str, StringConstraints(min_length=1)]
+    display_value: Annotated[str, StringConstraints(min_length=1)]
+
+
 class Nutrition(StrictBaseModel):
     basis: NutritionBasis
     serving_size: str | None
     values: NutritionValues
+    basis_label: str | None = None
+    serving_label: str | None = None
+    facts: list[NutritionFact] = Field(default_factory=list)
 
 
 class Ingredient(StrictBaseModel):

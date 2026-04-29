@@ -11,3 +11,47 @@ __pycache__/
 pytest-cache-files-*/
 .ruff_cache/
 *.log
+
+# IDE/editor
+.idea/
+.vscode/
+
+# Airflow runtime artifacts
+airflow/logs/
+airflow/plugins/
+airflow/config/
+airflow/.env
+airflow/airflow.cfg
+airflow/dags/__pycache__/
+
+# Python build/test/cache artifacts
+**/__pycache__/
+*.pyo
+*.pyd
+.coverage
+htmlcov/
+backend/.pytest_cache/
+backend/pytest-cache-files-*/
+backend/.ruff_cache/
+backend/.mypy_cache/
+scrappers/__pycache__/
+scrappers/tmp_*/
+scrappers/tmp_*.html
+scrappers/tmp_*.json
+
+# Flutter / Dart (mobile app)
+mobile/**
+mobile/build/
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/.pub-cache/
+mobile/android/local.properties
+mobile/ios/Flutter/ephemeral/
+mobile/ios/Flutter/flutter_export_environment.sh
+mobile/ios/Flutter/Generated.xcconfig
+mobile/ios/Runner/GeneratedPluginRegistrant.h
+mobile/ios/Runner/GeneratedPluginRegistrant.m
+mobile/macos/Flutter/ephemeral/
+mobile/windows/flutter/ephemeral/
