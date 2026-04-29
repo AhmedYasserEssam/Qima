@@ -64,6 +64,13 @@ python -m pip install --upgrade pip
 pip install -r backend/requirements-dev.txt
 ```
 
+If you installed `scrapling` with extras (for example `scrapling[fetchers]` or `scrapling[all]`), install the required browser dependencies:
+
+```bash
+scrapling install
+# scrapling install --force  # force reinstall
+```
+
 ---
 
 ## 4) Create your local environment file
@@ -127,7 +134,7 @@ If you are using pgAdmin, create a new database named `qima` from the UI.
 Run this command to confirm the Python packages installed correctly:
 
 ```bash
-python -c "import fastapi, sqlalchemy, psycopg, httpx; print('Backend dependencies installed successfully')"
+python -c "import fastapi, sqlalchemy, psycopg, httpx, scrapling; print('Backend dependencies installed successfully')"
 ```
 
 If this prints the success message, the backend environment is ready.

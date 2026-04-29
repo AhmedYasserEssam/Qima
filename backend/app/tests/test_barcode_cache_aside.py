@@ -79,6 +79,86 @@ def _sample_off_product(barcode: str) -> dict:
     }
 
 
+def _sample_carrefour_success(barcode: str) -> BarcodeLookupSuccess:
+    return BarcodeLookupSuccess.model_validate(
+        {
+            "product_id": f"carrefour:{barcode}",
+            "name": "Carrefour Sample Product",
+            "brand": "Carrefour",
+            "nutrition": {
+                "basis": "per_100g",
+                "serving_size": None,
+                "basis_label": "Per 100 g",
+                "serving_label": None,
+                "values": {
+                    "energy_kcal": 250.0,
+                    "protein_g": 5.0,
+                    "carbohydrates_g": 30.0,
+                    "fat_g": 10.0,
+                    "sugars_g": 3.0,
+                    "fiber_g": 2.0,
+                    "sodium_mg": 120.0,
+                    "salt_g": 0.3,
+                },
+                "facts": [],
+            },
+            "ingredients": [],
+            "allergens": [],
+            "source": {
+                "provider": "carrefour_egypt",
+                "provider_product_id": barcode,
+                "fetched_at": "2026-04-19T20:00:00Z",
+            },
+            "data_quality": {"completeness": "partial"},
+        }
+    )
+
+
+def test_carrefour_lookup_has_priority_over_cache_and_openfood() -> None:
+    barcode = "5449000000996"
+    fake_cache = FakeBarcodeCacheService()
+    counter = FetchCounter()
+
+    async def fetcher(_: str) -> dict:
+        counter.count += 1
+        return _sample_off_product(barcode)
+
+    service = BarcodeService(
+        cache_service=fake_cache,
+        product_fetcher=fetcher,
+        carrefour_lookup=lambda _: _sample_carrefour_success(barcode),
+    )
+    result = asyncio.run(service.lookup_barcode(barcode))
+
+    assert result.product_id == f"carrefour:{barcode}"
+    assert result.source.provider.value == "carrefour_egypt"
+    assert counter.count == 0
+    assert barcode not in fake_cache.entries
+
+
+def test_cache_is_checked_after_carrefour_miss() -> None:
+    barcode = "5449000000996"
+    fake_cache = FakeBarcodeCacheService()
+    counter = FetchCounter()
+
+    async def fetcher(_: str) -> dict:
+        counter.count += 1
+        return _sample_off_product(barcode)
+
+    service = BarcodeService(
+        cache_service=fake_cache,
+        product_fetcher=fetcher,
+        carrefour_lookup=lambda _: None,
+    )
+
+    first = asyncio.run(service.lookup_barcode(barcode))
+    second = asyncio.run(service.lookup_barcode(barcode))
+
+    assert first.source.provider.value == "open_food_facts"
+    assert second.model_dump() == first.model_dump()
+    assert counter.count == 1
+
+
 def test_first_cache_miss_fetches_and_caches_success() -> None:
     barcode = "5449000000996"
     fake_cache = FakeBarcodeCacheService()
@@ -88,7 +168,11 @@ def test_first_cache_miss_fetches_and_caches_success() -> None:
         counter.count += 1
         return _sample_off_product(barcode)
 
-    service = BarcodeService(cache_service=fake_cache, product_fetcher=fetcher)
+    service = BarcodeService(
+        cache_service=fake_cache,
+        product_fetcher=fetcher,
+        carrefour_lookup=lambda _: None,
+    )
     result = asyncio.run(service.lookup_barcode(barcode))
 
     assert isinstance(result, BarcodeLookupSuccess)
@@ -109,7 +193,11 @@ def test_second_lookup_hits_cache_without_refetch() -> None:
         counter.count += 1
         return _sample_off_product(barcode)
 
-    service = BarcodeService(cache_service=fake_cache, product_fetcher=fetcher)
+    service = BarcodeService(
+        cache_service=fake_cache,
+        product_fetcher=fetcher,
+        carrefour_lookup=lambda _: None,
+    )
     first = asyncio.run(service.lookup_barcode(barcode))
     second = asyncio.run(service.lookup_barcode(barcode))
 
@@ -126,7 +214,11 @@ def test_expired_cache_refetches() -> None:
         counter.count += 1
         return _sample_off_product(barcode)
 
-    service = BarcodeService(cache_service=fake_cache, product_fetcher=fetcher)
+    service = BarcodeService(
+        cache_service=fake_cache,
+        product_fetcher=fetcher,
+        carrefour_lookup=lambda _: None,
+    )
     asyncio.run(service.lookup_barcode(barcode))
     fake_cache.entries[barcode].expires_at = datetime.now(UTC) - timedelta(seconds=1)
 
@@ -143,7 +235,11 @@ def test_unknown_barcode_caches_not_found_for_24_hours() -> None:
         counter.count += 1
         raise OpenFoodFactsNotFound("missing")
 
-    service = BarcodeService(cache_service=fake_cache, product_fetcher=fetcher)
+    service = BarcodeService(
+        cache_service=fake_cache,
+        product_fetcher=fetcher,
+        carrefour_lookup=lambda _: None,
+    )
 
     with pytest.raises(NotFoundError):
         asyncio.run(service.lookup_barcode(barcode))
@@ -163,7 +259,11 @@ def test_unknown_barcode_returns_not_found_from_cache() -> None:
         counter.count += 1
         raise OpenFoodFactsNotFound("missing")
 
-    service = BarcodeService(cache_service=fake_cache, product_fetcher=fetcher)
+    service = BarcodeService(
+        cache_service=fake_cache,
+        product_fetcher=fetcher,
+        carrefour_lookup=lambda _: None,
+    )
 
     with pytest.raises(NotFoundError):
         asyncio.run(service.lookup_barcode(barcode))
@@ -183,6 +283,7 @@ def test_upstream_timeout_returns_503_and_is_not_long_cached() -> None:
     service = BarcodeService(
         cache_service=fake_cache,
         product_fetcher=fetcher,
+        carrefour_lookup=lambda _: None,
         cache_upstream_failures=False,
     )
 

@@ -9,6 +9,7 @@ from app.services.barcode_cache_service import (
     BarcodeCacheService,
     BarcodeCacheStatus,
 )
+from app.services.carrefour_catalog_service import lookup_carrefour_product
 from app.services.exceptions import NotFoundError, UpstreamUnavailableError
 from app.services.openfoodfacts_client import (
     OpenFoodFactsNotFound,
@@ -27,13 +28,21 @@ class BarcodeService:
         *,
         cache_service: BarcodeCacheService | None = None,
         product_fetcher: Callable[[str], Awaitable[dict]] = get_product_by_barcode,
+        carrefour_lookup: Callable[[str], BarcodeLookupSuccess | None] = lookup_carrefour_product,
         cache_upstream_failures: bool = False,
     ) -> None:
         self._cache = cache_service or BarcodeCacheService()
         self._product_fetcher = product_fetcher
+        self._carrefour_lookup = carrefour_lookup
         self._cache_upstream_failures = cache_upstream_failures
 
     async def lookup_barcode(self, barcode: str) -> BarcodeLookupSuccess:
+        # Priority 1: local Carrefour catalog
+        carrefour_match = self._carrefour_lookup(barcode)
+        if carrefour_match is not None:
+            return carrefour_match
+
+        # Priority 2: Open Food Facts cache
         now = datetime.now(UTC)
 
         cached_entry = self._cache.get_fresh(barcode, now=now)
@@ -50,6 +59,7 @@ class BarcodeService:
                     "Barcode provider is currently unavailable."
                 )
 
+        # Priority 3: Open Food Facts API fallback
         try:
             product = await self._product_fetcher(barcode)
         except OpenFoodFactsNotFound as exc:
