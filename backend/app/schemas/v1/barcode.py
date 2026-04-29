@@ -29,6 +29,7 @@ class AllergenSeverity(str, Enum):
 
 class SourceProvider(str, Enum):
     OPEN_FOOD_FACTS = "open_food_facts"
+    CARREFOUR_EGYPT = "carrefour_egypt"
 
 
 class DataCompleteness(str, Enum):

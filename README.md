@@ -138,8 +138,47 @@ At the moment, this repository primarily contains:
 - architecture and decision documentation
 - food and recipe datasets
 - project-level Git configuration
+- FastAPI backend for barcode lookup and normalization
+- Carrefour scraping pipeline with direct Postgres upsert
+- Airflow orchestration for monthly Carrefour refresh
 
 The README should be updated as implementation files for the mobile client, backend API, schemas, and matching logic are added.
+
+## Carrefour Data Pipeline
+
+Carrefour packaged-food data is now managed through a DB-first flow.
+
+- scraper: `scrappers/scrape_carrefour_food.py`
+- destination table: `carrefour_barcode_products`
+- deduplication strategy: SQL upsert with `ON CONFLICT (barcode) DO UPDATE`
+
+This means monthly or manual reruns update existing barcodes rather than inserting duplicates.
+
+## Airflow (Monthly Scrape)
+
+Airflow runs a monthly DAG that executes the Carrefour scraper and writes directly to Postgres.
+
+- DAG file: `airflow/dags/carrefour_monthly_scrape.py`
+- DAG id: `carrefour_monthly_scrape`
+- schedule: `0 3 1 * *` (03:00 on day 1 of each month)
+
+### Start stack
+
+```powershell
+docker compose build --no-cache airflow-init airflow-webserver airflow-scheduler
+docker compose up -d db
+docker compose up airflow-init
+docker compose up -d airflow-webserver airflow-scheduler
+```
+
+### Access
+
+- Airflow UI: `http://localhost:8080`
+- username: `admin`
+- password: `admin`
+- pgAdmin: `http://localhost:5050`
+
+For backend-specific commands and seeding instructions, see `backend/README.md`.
 
 ## Contributing
 
