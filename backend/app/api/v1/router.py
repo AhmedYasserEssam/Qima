@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
+    auth,
     barcode,
     chat,
     health,
@@ -16,6 +17,7 @@ from app.api.v1.endpoints import (
 api_router = APIRouter(prefix="/v1")
 
 api_router.include_router(health.router, tags=["health"])
+api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(barcode.router, prefix="/barcode", tags=["barcode"])
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 api_router.include_router(labs.router, prefix="/labs", tags=["labs"])

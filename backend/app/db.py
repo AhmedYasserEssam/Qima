@@ -176,3 +176,251 @@ def init_db() -> None:
                 """
             )
         )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS allrecipes_recipes (
+                    source_url TEXT PRIMARY KEY,
+                    source TEXT NOT NULL,
+                    recipe_id TEXT,
+                    stable_slug TEXT,
+                    title TEXT NOT NULL,
+                    cuisine TEXT,
+                    category TEXT,
+                    meal_type TEXT,
+                    author_name TEXT,
+                    servings DOUBLE PRECISION,
+                    prep_minutes INTEGER,
+                    cook_minutes INTEGER,
+                    total_minutes INTEGER,
+                    calories_kcal DOUBLE PRECISION,
+                    protein_g DOUBLE PRECISION,
+                    carbohydrates_g DOUBLE PRECISION,
+                    fat_g DOUBLE PRECISION,
+                    fiber_g DOUBLE PRECISION,
+                    sugar_g DOUBLE PRECISION,
+                    sodium_mg DOUBLE PRECISION,
+                    rating DOUBLE PRECISION,
+                    review_count INTEGER,
+                    date_published TEXT,
+                    date_modified TEXT,
+                    ingredients JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    directions_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    cooking_methods JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    equipment JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    nutrition_facts_raw JSONB,
+                    nutrition_quality JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    dietary_flags JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    allergen_flags JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    possible_allergen_flags JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    allergen_basis JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    allergen_confidence JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    difficulty TEXT,
+                    data_quality_flags JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    completeness_score DOUBLE PRECISION,
+                    normalization_quality_score DOUBLE PRECISION,
+                    recipe_quality_score DOUBLE PRECISION,
+                    attribution JSONB
+                );
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE allrecipes_recipes
+                ADD COLUMN IF NOT EXISTS directions_json JSONB NOT NULL DEFAULT '[]'::jsonb;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE allrecipes_recipes
+                ADD COLUMN IF NOT EXISTS cooking_methods JSONB NOT NULL DEFAULT '[]'::jsonb;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE allrecipes_recipes
+                ADD COLUMN IF NOT EXISTS equipment JSONB NOT NULL DEFAULT '[]'::jsonb;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE allrecipes_recipes
+                ADD COLUMN IF NOT EXISTS nutrition_quality JSONB NOT NULL DEFAULT '{}'::jsonb;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE allrecipes_recipes
+                ADD COLUMN IF NOT EXISTS possible_allergen_flags JSONB NOT NULL DEFAULT '[]'::jsonb;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE allrecipes_recipes
+                ADD COLUMN IF NOT EXISTS allergen_basis JSONB NOT NULL DEFAULT '{}'::jsonb;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE allrecipes_recipes
+                ADD COLUMN IF NOT EXISTS allergen_confidence JSONB NOT NULL DEFAULT '{}'::jsonb;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE allrecipes_recipes
+                ADD COLUMN IF NOT EXISTS difficulty TEXT;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE allrecipes_recipes
+                ADD COLUMN IF NOT EXISTS data_quality_flags JSONB NOT NULL DEFAULT '[]'::jsonb;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE allrecipes_recipes
+                ADD COLUMN IF NOT EXISTS recipe_quality_score DOUBLE PRECISION;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE allrecipes_recipes
+                ADD COLUMN IF NOT EXISTS completeness_score DOUBLE PRECISION;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE allrecipes_recipes
+                ADD COLUMN IF NOT EXISTS normalization_quality_score DOUBLE PRECISION;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    id BIGSERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    email TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    is_email_verified BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL,
+                    last_login_at TIMESTAMP NULL
+                );
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE users
+                ADD COLUMN IF NOT EXISTS name TEXT;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                UPDATE users
+                SET name = split_part(email, '@', 1)
+                WHERE name IS NULL OR btrim(name) = '';
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE users
+                ALTER COLUMN name SET NOT NULL;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS email_verification_tokens (
+                    id BIGSERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    token_hash TEXT NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    used_at TIMESTAMP NULL,
+                    invalidated_at TIMESTAMP NULL,
+                    created_at TIMESTAMP NOT NULL
+                );
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_email_verification_tokens_user_id
+                ON email_verification_tokens(user_id);
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_email_verification_tokens_expires_at
+                ON email_verification_tokens(expires_at);
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_email_verification_tokens_active_per_user
+                ON email_verification_tokens(user_id)
+                WHERE used_at IS NULL AND invalidated_at IS NULL;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS nutrition_profiles (
+                    id BIGSERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                    age INTEGER NOT NULL,
+                    sex TEXT NOT NULL,
+                    height_cm DOUBLE PRECISION NOT NULL,
+                    weight_kg DOUBLE PRECISION NOT NULL,
+                    activity_level TEXT NOT NULL,
+                    nutrition_goal TEXT NOT NULL,
+                    allergens JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    dietary_restrictions JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    budget_limit_egp DOUBLE PRECISION NULL,
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL
+                );
+                """
+            )
+        )

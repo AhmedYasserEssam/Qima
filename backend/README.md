@@ -83,3 +83,46 @@ pytest backend/app/tests
 ```bash
 PYTHONPATH=backend pytest backend/app/tests
 ```
+
+## Auth + Profile Schema Notes
+
+Detailed runbook:
+
+- `backend/AUTH_PROFILE_GUIDE.md`
+
+Current auth flow:
+
+1. `POST /v1/auth/signup`
+2. `POST /v1/auth/login`
+3. `POST /v1/profile/update` for first-time users
+4. `GET /v1/profile/me` after onboarding is complete
+
+Behavior note:
+
+- A newly signed-up user can log in immediately.
+- `GET /v1/profile/me` returns `404` until that user creates a profile with `POST /v1/profile/update`.
+
+`init_db()` now creates:
+
+- `users`
+- `email_verification_tokens`
+- `nutrition_profiles`
+
+Important constraints:
+
+- `users.email` is unique.
+- `nutrition_profiles.user_id` is unique (1 profile per user).
+- `email_verification_tokens` has a partial unique index ensuring one active token per user:
+  - `used_at IS NULL AND invalidated_at IS NULL`
+
+Token issuance behavior:
+
+- previous active verification tokens are invalidated in the same transaction before a new token is inserted.
+
+Follow-up (out of scope for this feature):
+
+- password reset endpoints (`forgot-password`, `reset-password`)
+
+### Legacy Verification Artifacts
+
+The codebase still contains legacy email verification settings and tables for backward compatibility, but the current local auth flow does not require email verification before login.
