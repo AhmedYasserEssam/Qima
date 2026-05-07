@@ -59,7 +59,7 @@ def _error_response(
             message=message,
             retryable=retryable,
             request_id=f"req_{uuid4().hex[:12]}",
-            details=details,
+            details=details or {},
         )
     )
     return JSONResponse(

@@ -10,6 +10,9 @@ class ErrorCode(StrEnum):
     UNAUTHORIZED = "UNAUTHORIZED"
     FORBIDDEN = "FORBIDDEN"
     NOT_FOUND = "NOT_FOUND"
+    ACCOUNT_ALREADY_EXISTS = "ACCOUNT_ALREADY_EXISTS"
+    ACCOUNT_NOT_FOUND = "ACCOUNT_NOT_FOUND"
+    INVALID_PASSWORD = "INVALID_PASSWORD"
     VALIDATION_ERROR = "VALIDATION_ERROR"
     RATE_LIMITED = "RATE_LIMITED"
     UPSTREAM_UNAVAILABLE = "UPSTREAM_UNAVAILABLE"
@@ -22,6 +25,9 @@ class ErrorCode(StrEnum):
             ErrorCode.UNAUTHORIZED: HTTPStatus.UNAUTHORIZED,
             ErrorCode.FORBIDDEN: HTTPStatus.FORBIDDEN,
             ErrorCode.NOT_FOUND: HTTPStatus.NOT_FOUND,
+            ErrorCode.ACCOUNT_ALREADY_EXISTS: HTTPStatus.CONFLICT,
+            ErrorCode.ACCOUNT_NOT_FOUND: HTTPStatus.NOT_FOUND,
+            ErrorCode.INVALID_PASSWORD: HTTPStatus.UNAUTHORIZED,
             ErrorCode.VALIDATION_ERROR: HTTPStatus.UNPROCESSABLE_ENTITY,
             ErrorCode.RATE_LIMITED: HTTPStatus.TOO_MANY_REQUESTS,
             ErrorCode.UPSTREAM_UNAVAILABLE: HTTPStatus.SERVICE_UNAVAILABLE,
@@ -36,7 +42,7 @@ class ErrorBody(BaseModel):
     message: str = Field(..., min_length=1)
     retryable: bool
     request_id: str = Field(..., min_length=1)
-    details: dict[str, Any] | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class ErrorResponse(BaseModel):

@@ -3,7 +3,9 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -26,11 +28,119 @@ const apiBaseUrl = String.fromEnvironment(
 );
 
 final apiClientProvider = Provider<ApiClient>((ref) {
-  return ApiClient(baseUrl: apiBaseUrl, client: http.Client());
+  return ApiClient(
+    baseUrl: apiBaseUrl,
+    client: http.Client(),
+    authTokenReader: () => ref.read(authTokenProvider),
+  );
 });
 
 final debugModeProvider = StateProvider<bool>((ref) => false);
 final profileIdProvider = StateProvider<String?>((ref) => null);
+final authTokenProvider = StateProvider<String?>((ref) => null);
+final authBootstrappedProvider = StateProvider<bool>((ref) => false);
+final authStageProvider = StateProvider<AuthStage>((ref) => AuthStage.booting);
+
+const authTokenStorageKey = 'auth_token';
+final _emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+const _secureTokenStorage = FlutterSecureStorage();
+
+class AuthTokenStore {
+  const AuthTokenStore();
+
+  Future<void> writeToken(String? token) async {
+    if (token == null || token.isEmpty) {
+      await _deleteToken();
+      return;
+    }
+
+    var storedInSecureStorage = false;
+    try {
+      await _secureTokenStorage.write(key: authTokenStorageKey, value: token);
+      storedInSecureStorage = true;
+    } on MissingPluginException {
+      storedInSecureStorage = false;
+    } on PlatformException {
+      storedInSecureStorage = false;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    if (storedInSecureStorage) {
+      await prefs.remove(authTokenStorageKey);
+    } else {
+      await prefs.setString(authTokenStorageKey, token);
+    }
+  }
+
+  Future<String?> readToken() async {
+    try {
+      final token = await _secureTokenStorage.read(key: authTokenStorageKey);
+      if (token != null && token.isNotEmpty) {
+        return token;
+      }
+    } on MissingPluginException {
+      // Fall back for tests and unsupported platforms.
+    } on PlatformException {
+      // Fall back when secure storage is unavailable at runtime.
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final legacyToken = prefs.getString(authTokenStorageKey);
+    if (legacyToken == null || legacyToken.isEmpty) {
+      return null;
+    }
+    return legacyToken;
+  }
+
+  Future<void> _deleteToken() async {
+    try {
+      await _secureTokenStorage.delete(key: authTokenStorageKey);
+    } on MissingPluginException {
+      // Ignore and clear fallback storage below.
+    } on PlatformException {
+      // Ignore and clear fallback storage below.
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(authTokenStorageKey);
+  }
+}
+
+enum AuthStage {
+  booting,
+  loggedOut,
+  needsProfile,
+  ready,
+}
+
+Future<void> persistAuthToken(String? token) async {
+  await const AuthTokenStore().writeToken(token);
+}
+
+Future<void> resolveAuthStage(WidgetRef ref) async {
+  final token = ref.read(authTokenProvider);
+
+  if (token == null || token.isEmpty) {
+    ref.read(authStageProvider.notifier).state = AuthStage.loggedOut;
+    return;
+  }
+
+  try {
+    await ref.read(apiClientProvider).get('/v1/profile/me', requiredFields: ['user_id']);
+    ref.read(authStageProvider.notifier).state = AuthStage.ready;
+  } on ApiFailure catch (error) {
+    if (error.statusCode == 404) {
+      ref.read(authStageProvider.notifier).state = AuthStage.needsProfile;
+      return;
+    }
+    if (error.statusCode == 401) {
+      await persistAuthToken(null);
+      ref.read(authTokenProvider.notifier).state = null;
+      ref.read(authStageProvider.notifier).state = AuthStage.loggedOut;
+      return;
+    }
+    ref.read(authStageProvider.notifier).state = AuthStage.loggedOut;
+  }
+}
 
 final healthProvider = FutureProvider<ApiPayload>((ref) async {
   return ref
@@ -39,9 +149,50 @@ final healthProvider = FutureProvider<ApiPayload>((ref) async {
 });
 
 final routerProvider = Provider<GoRouter>((ref) {
+  final bootstrapped = ref.watch(authBootstrappedProvider);
+  final authStage = ref.watch(authStageProvider);
   return GoRouter(
-    initialLocation: '/scan',
+    initialLocation: '/splash',
+    redirect: (context, state) {
+      final location = state.uri.path;
+      final isSplash = location == '/splash';
+      final isLogin = location == '/login';
+      final isSignup = location == '/signup';
+      final isProfileSetup = location == '/profile-setup';
+      final isAuthRoute = isLogin || isSignup || isProfileSetup;
+
+      if (!bootstrapped || authStage == AuthStage.booting) {
+        return isSplash ? null : '/splash';
+      }
+
+      switch (authStage) {
+        case AuthStage.loggedOut:
+          return (isLogin || isSignup) ? null : '/login';
+        case AuthStage.needsProfile:
+          return isProfileSetup ? null : '/profile-setup';
+        case AuthStage.ready:
+          return (isAuthRoute || isSplash) ? '/scan' : null;
+        case AuthStage.booting:
+          return isSplash ? null : '/splash';
+      }
+    },
     routes: [
+      GoRoute(
+        path: '/splash',
+        builder: (context, state) => const AuthSplashScreen(),
+      ),
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/signup',
+        builder: (context, state) => const SignUpScreen(),
+      ),
+      GoRoute(
+        path: '/profile-setup',
+        builder: (context, state) => const ProfileSetupScreen(),
+      ),
       ShellRoute(
         builder: (context, state, child) => AppShell(child: child),
         routes: [
@@ -94,12 +245,15 @@ class _QimaAppState extends ConsumerState<QimaApp> {
   @override
   void initState() {
     super.initState();
-    unawaited(_loadProfileId());
+    unawaited(_loadLocalState());
   }
 
-  Future<void> _loadProfileId() async {
+  Future<void> _loadLocalState() async {
     final prefs = await SharedPreferences.getInstance();
     ref.read(profileIdProvider.notifier).state = prefs.getString('profile_id');
+    ref.read(authTokenProvider.notifier).state = await const AuthTokenStore().readToken();
+    await resolveAuthStage(ref);
+    ref.read(authBootstrappedProvider.notifier).state = true;
   }
 
   @override
@@ -121,6 +275,613 @@ class _QimaAppState extends ConsumerState<QimaApp> {
       ),
       routerConfig: router,
     );
+  }
+}
+
+class AuthSplashScreen extends StatelessWidget {
+  const AuthSplashScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+class LoginScreen extends ConsumerStatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends ConsumerState<LoginScreen> {
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+  bool busy = false;
+  String? feedback;
+  bool isError = false;
+
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Login')),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Sign in to access Qima',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: const InputDecoration(labelText: 'Email'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: passwordController,
+                        obscureText: true,
+                        decoration: const InputDecoration(labelText: 'Password'),
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: busy ? null : _login,
+                        icon: const Icon(Icons.login),
+                        label: const Text('Log in'),
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton(
+                        onPressed: busy ? null : () => context.go('/signup'),
+                        child: const Text('Create account'),
+                      ),
+                      if (busy) ...[
+                        const SizedBox(height: 12),
+                        const Center(child: CircularProgressIndicator()),
+                      ],
+                      if (feedback != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            color: isError
+                                ? colorScheme.errorContainer
+                                : colorScheme.primaryContainer,
+                          ),
+                          child: Text(
+                            feedback!,
+                            style: TextStyle(
+                              color: isError
+                                  ? colorScheme.onErrorContainer
+                                  : colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _login() async {
+    final emailInput = emailController.text;
+    final email = emailInput.trim().toLowerCase();
+    final password = passwordController.text;
+    final emailError = validateEmailAddress(emailInput);
+    if (emailError != null) {
+      showValidation(context, emailError);
+      return;
+    }
+    if (password.trim().isEmpty) {
+      showValidation(context, 'Password is required.');
+      return;
+    }
+
+    setState(() {
+      busy = true;
+      feedback = null;
+    });
+
+    try {
+      final payload = await ref.read(apiClientProvider).post(
+        '/v1/auth/login',
+        {'email': email, 'password': password},
+        requiredFields: ['message', 'access_token', 'token_type', 'user'],
+      );
+      final token = text(payload.raw['access_token'], fallback: '').trim();
+      if (token.isEmpty) {
+        throw ApiFailure(
+          message: 'Login succeeded but no access token was returned.',
+          retryable: false,
+        );
+      }
+      await persistAuthToken(token);
+      ref.read(authTokenProvider.notifier).state = token;
+      await resolveAuthStage(ref);
+      if (mounted) {
+        context.go('/scan');
+      }
+    } on ApiFailure catch (error) {
+      _setFeedback(error.message, isErrorValue: true);
+    } finally {
+      if (mounted) {
+        setState(() => busy = false);
+      }
+    }
+  }
+
+  void _setFeedback(String message, {bool isErrorValue = false}) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      feedback = message;
+      isError = isErrorValue;
+    });
+  }
+}
+
+class SignUpScreen extends ConsumerStatefulWidget {
+  const SignUpScreen({super.key});
+
+  @override
+  ConsumerState<SignUpScreen> createState() => _SignUpScreenState();
+}
+
+class _SignUpScreenState extends ConsumerState<SignUpScreen> {
+  final nameController = TextEditingController();
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+  bool busy = false;
+  String? feedback;
+  bool isError = false;
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Sign Up')),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Create your account',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: nameController,
+                        keyboardType: TextInputType.name,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(labelText: 'Full name'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: const InputDecoration(labelText: 'Email'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: passwordController,
+                        obscureText: true,
+                        decoration: const InputDecoration(labelText: 'Password'),
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: busy ? null : _signup,
+                        icon: const Icon(Icons.person_add_alt_1),
+                        label: const Text('Create account'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: busy ? null : () => context.go('/login'),
+                        child: const Text('Back to login'),
+                      ),
+                      if (busy) ...[
+                        const SizedBox(height: 12),
+                        const Center(child: CircularProgressIndicator()),
+                      ],
+                      if (feedback != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            color: isError
+                                ? colorScheme.errorContainer
+                                : colorScheme.primaryContainer,
+                          ),
+                          child: Text(
+                            feedback!,
+                            style: TextStyle(
+                              color: isError
+                                  ? colorScheme.onErrorContainer
+                                  : colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _signup() async {
+    final name = nameController.text.trim();
+    final emailInput = emailController.text;
+    final email = emailInput.trim().toLowerCase();
+    final password = passwordController.text;
+    if (name.isEmpty) {
+      showValidation(context, 'Name is required.');
+      return;
+    }
+    final emailError = validateEmailAddress(emailInput);
+    if (emailError != null) {
+      showValidation(context, emailError);
+      return;
+    }
+    if (password.trim().isEmpty) {
+      showValidation(context, 'Password is required.');
+      return;
+    }
+
+    setState(() {
+      busy = true;
+      feedback = null;
+    });
+
+    try {
+      final payload = await ref.read(apiClientProvider).post(
+        '/v1/auth/signup',
+        {'email': email, 'password': password, 'name': name},
+        requiredFields: ['message', 'user'],
+      );
+
+      if (mounted) {
+        showValidation(
+          context,
+          text(
+            payload.raw['message'],
+            fallback: 'Account created successfully. You can now log in.',
+          ),
+        );
+        context.go('/login');
+      }
+    } on ApiFailure catch (error) {
+      _setFeedback(error.message, isErrorValue: true);
+    } finally {
+      if (mounted) {
+        setState(() => busy = false);
+      }
+    }
+  }
+
+  void _setFeedback(String message, {bool isErrorValue = false}) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      feedback = message;
+      isError = isErrorValue;
+    });
+  }
+}
+
+class ProfileSetupScreen extends ConsumerStatefulWidget {
+  const ProfileSetupScreen({super.key});
+
+  @override
+  ConsumerState<ProfileSetupScreen> createState() => _ProfileSetupScreenState();
+}
+
+class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
+  final ageController = TextEditingController(text: '30');
+  final heightController = TextEditingController(text: '170');
+  final weightController = TextEditingController(text: '70');
+  final allergensController = TextEditingController();
+  final dietaryRestrictionsController = TextEditingController();
+  final budgetController = TextEditingController();
+  String sex = 'male';
+  String activity = 'moderately_active';
+  String goal = 'improve_general_health';
+  bool busy = false;
+  String? feedback;
+  bool isError = false;
+
+  @override
+  void dispose() {
+    ageController.dispose();
+    heightController.dispose();
+    weightController.dispose();
+    allergensController.dispose();
+    dietaryRestrictionsController.dispose();
+    budgetController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Complete Profile Setup'),
+        actions: [
+          IconButton(
+            tooltip: 'Logout',
+            onPressed: busy
+                ? null
+                : () async {
+                    await persistAuthToken(null);
+                    ref.read(authTokenProvider.notifier).state = null;
+                    ref.read(authStageProvider.notifier).state = AuthStage.loggedOut;
+                    if (context.mounted) {
+                      context.go('/login');
+                    }
+                  },
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const NoticeCard(
+                        icon: Icons.lock_outline,
+                        title: 'Mandatory Step',
+                        message:
+                            'You must complete your profile before accessing app features.',
+                      ),
+                      TextFormField(
+                        controller: ageController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Age'),
+                      ),
+                      TextFormField(
+                        controller: heightController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Height cm'),
+                      ),
+                      TextFormField(
+                        controller: weightController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Weight kg'),
+                      ),
+                      DropdownButtonFormField<String>(
+                        initialValue: sex,
+                        decoration: const InputDecoration(labelText: 'Sex'),
+                        items: options(['male', 'female']),
+                        onChanged: (value) => setState(() => sex = value ?? sex),
+                      ),
+                      DropdownButtonFormField<String>(
+                        initialValue: activity,
+                        decoration: const InputDecoration(labelText: 'Activity level'),
+                        items: options([
+                          'sedentary',
+                          'lightly_active',
+                          'moderately_active',
+                          'very_active',
+                          'athlete',
+                        ]),
+                        onChanged: (value) =>
+                            setState(() => activity = value ?? activity),
+                      ),
+                      DropdownButtonFormField<String>(
+                        initialValue: goal,
+                        decoration: const InputDecoration(labelText: 'Nutrition goal'),
+                        items: options([
+                          'lose_weight',
+                          'maintain_weight',
+                          'gain_weight',
+                          'build_muscle',
+                          'improve_general_health',
+                          'eat_high_protein',
+                          'eat_low_calorie',
+                          'eat_balanced',
+                          'reduce_sugar',
+                          'reduce_sodium',
+                          'reduce_saturated_fat',
+                          'increase_fiber',
+                          'budget_friendly',
+                        ]),
+                        onChanged: (value) => setState(() => goal = value ?? goal),
+                      ),
+                      TextFormField(
+                        controller: allergensController,
+                        decoration: const InputDecoration(
+                          labelText: 'Allergens (comma-separated)',
+                        ),
+                      ),
+                      TextFormField(
+                        controller: dietaryRestrictionsController,
+                        decoration: const InputDecoration(
+                          labelText: 'Dietary restrictions (comma-separated)',
+                        ),
+                      ),
+                      TextFormField(
+                        controller: budgetController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Budget limit EGP (optional)',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: busy ? null : _submitProfile,
+                        icon: const Icon(Icons.check_circle_outline),
+                        label: const Text('Finish onboarding'),
+                      ),
+                      if (busy) ...[
+                        const SizedBox(height: 12),
+                        const Center(child: CircularProgressIndicator()),
+                      ],
+                      if (feedback != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            color: isError
+                                ? colorScheme.errorContainer
+                                : colorScheme.primaryContainer,
+                          ),
+                          child: Text(
+                            feedback!,
+                            style: TextStyle(
+                              color: isError
+                                  ? colorScheme.onErrorContainer
+                                  : colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submitProfile() async {
+    final body = _buildProfileBody();
+    if (body == null) {
+      return;
+    }
+
+    setState(() {
+      busy = true;
+      feedback = null;
+    });
+
+    try {
+      await ref.read(apiClientProvider).post(
+        '/v1/profile/update',
+        body,
+        requiredFields: ['user_id', 'goal', 'updated_at'],
+      );
+      await resolveAuthStage(ref);
+      if (mounted) {
+        context.go('/scan');
+      }
+    } on ApiFailure catch (error) {
+      _setFeedback(error.message, isErrorValue: true);
+    } finally {
+      if (mounted) {
+        setState(() => busy = false);
+      }
+    }
+  }
+
+  Map<String, Object?>? _buildProfileBody() {
+    final age = int.tryParse(ageController.text.trim());
+    final height = double.tryParse(heightController.text.trim());
+    final weight = double.tryParse(weightController.text.trim());
+    final budgetText = budgetController.text.trim();
+    final budget = budgetText.isEmpty ? null : double.tryParse(budgetText);
+
+    if (age == null || age < 1 || height == null || weight == null) {
+      showValidation(context, 'Please provide valid age, height, and weight.');
+      return null;
+    }
+    if (budgetText.isNotEmpty && (budget == null || budget <= 0)) {
+      showValidation(context, 'Budget limit must be a positive number.');
+      return null;
+    }
+
+    final allergens = allergensController.text
+        .split(',')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+    final restrictions = dietaryRestrictionsController.text
+        .split(',')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+
+    return {
+      'age': age,
+      'sex': sex,
+      'height_cm': height,
+      'weight_kg': weight,
+      'activity_level': activity,
+      'goal': goal,
+      'allergens': allergens,
+      'dietary_restrictions': restrictions,
+      'budget_limit_egp': budget,
+    };
+  }
+
+  void _setFeedback(String message, {bool isErrorValue = false}) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      feedback = message;
+      isError = isErrorValue;
+    });
   }
 }
 
@@ -146,6 +907,18 @@ class AppShell extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Qima V1 Contract Client'),
         actions: [
+          IconButton(
+            tooltip: 'Logout',
+            onPressed: () async {
+              await persistAuthToken(null);
+              ref.read(authTokenProvider.notifier).state = null;
+              ref.read(authStageProvider.notifier).state = AuthStage.loggedOut;
+              if (context.mounted) {
+                context.go('/login');
+              }
+            },
+            icon: const Icon(Icons.logout),
+          ),
           IconButton(
             tooltip: 'Profile',
             onPressed: () => context.go('/profile'),
@@ -179,20 +952,39 @@ class AppShell extends ConsumerWidget {
 }
 
 class ApiClient {
-  ApiClient({required this.baseUrl, required this.client});
+  ApiClient({
+    required this.baseUrl,
+    required this.client,
+    required this.authTokenReader,
+  });
 
   final String baseUrl;
   final http.Client client;
+  final String? Function() authTokenReader;
 
   Uri _uri(String path) => Uri.parse('$baseUrl$path');
+
+  Map<String, String> _headers({bool includeJsonContentType = false}) {
+    final headers = <String, String>{};
+    if (includeJsonContentType) {
+      headers['content-type'] = 'application/json';
+    }
+    final token = authTokenReader();
+    if (token != null && token.isNotEmpty) {
+      headers['authorization'] = 'Bearer $token';
+    }
+    return headers;
+  }
 
   Future<ApiPayload> get(
     String path, {
     required List<String> requiredFields,
   }) async {
     try {
-      final response = await client.get(_uri(path));
+      final response = await client.get(_uri(path), headers: _headers());
       return _parseResponse(response, requiredFields);
+    } on ApiFailure {
+      rethrow;
     } on Exception catch (error) {
       throw ApiFailure.network(error.toString());
     }
@@ -206,10 +998,12 @@ class ApiClient {
     try {
       final response = await client.post(
         _uri(path),
-        headers: {'content-type': 'application/json'},
+        headers: _headers(includeJsonContentType: true),
         body: jsonEncode(body),
       );
       return _parseResponse(response, requiredFields);
+    } on ApiFailure {
+      rethrow;
     } on Exception catch (error) {
       throw ApiFailure.network(error.toString());
     }
@@ -222,11 +1016,14 @@ class ApiClient {
   }) async {
     try {
       final request = http.MultipartRequest('POST', _uri(path))
+        ..headers.addAll(_headers())
         ..fields['locale'] = 'en'
         ..files.add(await http.MultipartFile.fromPath('image', image.path));
       final streamed = await client.send(request);
       final response = await http.Response.fromStream(streamed);
       return _parseResponse(response, requiredFields);
+    } on ApiFailure {
+      rethrow;
     } on Exception catch (error) {
       throw ApiFailure.network(error.toString());
     }
@@ -288,6 +1085,7 @@ class ApiFailure implements Exception {
     required this.message,
     required this.retryable,
     this.statusCode,
+    this.code,
     this.details,
   });
 
@@ -295,6 +1093,7 @@ class ApiFailure implements Exception {
     return ApiFailure(
       message: 'Could not reach the FastAPI backend.',
       retryable: true,
+      code: 'NETWORK_ERROR',
       details: details,
     );
   }
@@ -302,17 +1101,45 @@ class ApiFailure implements Exception {
   factory ApiFailure.fromResponse(int statusCode, Map<String, Object?> raw) {
     final error = raw['error'];
     if (error is Map) {
+      final code = text(error['code'], fallback: '').trim();
       return ApiFailure(
         message: text(error['message'], fallback: 'Request failed.'),
         retryable: error['retryable'] == true,
         statusCode: statusCode,
+        code: code.isEmpty ? null : code,
         details: jsonEncode(raw),
       );
+    }
+    final detail = raw['detail'];
+    if (detail is String && detail.trim().isNotEmpty) {
+      return ApiFailure(
+        message: detail.trim(),
+        retryable: statusCode >= 500 || statusCode == 429,
+        statusCode: statusCode,
+        code: null,
+        details: jsonEncode(raw),
+      );
+    }
+    if (detail is List && detail.isNotEmpty) {
+      final first = detail.first;
+      if (first is Map) {
+        final msg = text(first['msg'], fallback: '').trim();
+        if (msg.isNotEmpty) {
+          return ApiFailure(
+            message: msg,
+            retryable: statusCode >= 500 || statusCode == 429,
+            statusCode: statusCode,
+            code: null,
+            details: jsonEncode(raw),
+          );
+        }
+      }
     }
     return ApiFailure(
       message: 'Request failed with HTTP $statusCode.',
       retryable: statusCode >= 500 || statusCode == 429,
       statusCode: statusCode,
+      code: null,
       details: jsonEncode(raw),
     );
   }
@@ -320,6 +1147,7 @@ class ApiFailure implements Exception {
   final String message;
   final bool retryable;
   final int? statusCode;
+  final String? code;
   final String? details;
 
   @override
@@ -921,7 +1749,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final ageController = TextEditingController(text: '30');
   final heightController = TextEditingController(text: '170');
   final weightController = TextEditingController(text: '70');
-  String sex = 'prefer_not_to_say';
+  final allergensController = TextEditingController();
+  final dietaryRestrictionsController = TextEditingController();
+  final budgetController = TextEditingController();
+  String sex = 'male';
   String activity = 'moderately_active';
   String goal = 'improve_general_health';
 
@@ -930,12 +1761,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     ageController.dispose();
     heightController.dispose();
     weightController.dispose();
+    allergensController.dispose();
+    dietaryRestrictionsController.dispose();
+    budgetController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final profileId = ref.watch(profileIdProvider);
     return EndpointPage(
       title: 'Profile',
       children: [
@@ -950,7 +1783,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (profileId != null) Text('Cached profile_id: $profileId'),
               TextFormField(
                 controller: ageController,
                 keyboardType: TextInputType.number,
@@ -972,8 +1804,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 items: options([
                   'male',
                   'female',
-                  'other',
-                  'prefer_not_to_say',
                 ]),
                 onChanged: (value) => setState(() => sex = value ?? sex),
               ),
@@ -995,11 +1825,39 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 decoration: const InputDecoration(labelText: 'Goal'),
                 items: options([
                   'lose_weight',
-                  'gain_muscle',
                   'maintain_weight',
+                  'gain_weight',
+                  'build_muscle',
                   'improve_general_health',
+                  'eat_high_protein',
+                  'eat_low_calorie',
+                  'eat_balanced',
+                  'reduce_sugar',
+                  'reduce_sodium',
+                  'reduce_saturated_fat',
+                  'increase_fiber',
+                  'budget_friendly',
                 ]),
                 onChanged: (value) => setState(() => goal = value ?? goal),
+              ),
+              TextFormField(
+                controller: allergensController,
+                decoration: const InputDecoration(
+                  labelText: 'Allergens (comma-separated)',
+                ),
+              ),
+              TextFormField(
+                controller: dietaryRestrictionsController,
+                decoration: const InputDecoration(
+                  labelText: 'Dietary restrictions (comma-separated)',
+                ),
+              ),
+              TextFormField(
+                controller: budgetController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Budget limit EGP (optional)',
+                ),
               ),
               const SizedBox(height: 8),
               FilledButton.icon(
@@ -1019,38 +1877,51 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Map<String, Object?>? _profileBody({String? profileId}) {
+  Map<String, Object?>? _profileBody() {
     final age = int.tryParse(ageController.text.trim());
     final height = double.tryParse(heightController.text.trim());
     final weight = double.tryParse(weightController.text.trim());
-    if (age == null || age < 18 || height == null || weight == null) {
+    final budgetText = budgetController.text.trim();
+    final budget = budgetText.isEmpty ? null : double.tryParse(budgetText);
+    if (age == null || age < 1 || height == null || weight == null) {
       showValidation(
         context,
-        'Age must be 18+, and height/weight must be valid.',
+        'Age must be valid, and height/weight must be valid numbers.',
       );
       return null;
     }
+    if (budgetText.isNotEmpty && (budget == null || budget <= 0)) {
+      showValidation(context, 'Budget limit must be a positive number.');
+      return null;
+    }
+
+    final allergens = allergensController.text
+        .split(',')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+    final restrictions = dietaryRestrictionsController.text
+        .split(',')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+
     final body = <String, Object?>{
-      'age_years': age,
+      'age': age,
       'sex': sex,
       'height_cm': height,
       'weight_kg': weight,
       'activity_level': activity,
       'goal': goal,
-      'allergens': <String>[],
-      'dietary_exclusions': <String>[],
-      'dietary_preferences': ['egyptian_foods'],
-      'exclusion_flags': <String>[],
+      'allergens': allergens,
+      'dietary_restrictions': restrictions,
+      'budget_limit_egp': budget,
     };
-    if (profileId != null) {
-      body['profile_id'] = profileId;
-    }
     return body;
   }
 
   Future<void> _saveProfile() async {
-    final currentId = ref.read(profileIdProvider);
-    final body = _profileBody(profileId: currentId);
+    final body = _profileBody();
     if (body == null) {
       return;
     }
@@ -1061,22 +1932,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             '/v1/profile/update',
             body,
             requiredFields: [
-              'profile_id',
-              'normalized_profile',
-              'support_status',
+              'user_id',
+              'goal',
+              'updated_at',
             ],
           ),
         );
-    final state = ref.read(profileControllerProvider);
-    final raw = state?.valueOrNull?.raw;
-    final profileId = raw == null
-        ? null
-        : text(raw['profile_id'], fallback: '');
-    if (profileId != null && profileId.isNotEmpty) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('profile_id', profileId);
-      ref.read(profileIdProvider.notifier).state = profileId;
-    }
   }
 }
 
@@ -2419,6 +3280,17 @@ List<DropdownMenuItem<String>> options(List<String> values) {
     for (final value in values)
       DropdownMenuItem(value: value, child: Text(value.replaceAll('_', ' '))),
   ];
+}
+
+String? validateEmailAddress(String rawEmail) {
+  final email = rawEmail.trim().toLowerCase();
+  if (email.isEmpty) {
+    return 'Email is required.';
+  }
+  if (!_emailRegex.hasMatch(email)) {
+    return 'Please enter a valid email address.';
+  }
+  return null;
 }
 
 void showValidation(BuildContext context, String message) {

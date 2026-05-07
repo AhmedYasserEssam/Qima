@@ -51,18 +51,6 @@ def test_v1_post_endpoints_return_mock_responses() -> None:
         ),
         (
             "post",
-            "/v1/profile/update",
-            {
-                "age_years": 30,
-                "sex": "prefer_not_to_say",
-                "height_cm": 170,
-                "weight_kg": 70,
-                "activity_level": "moderately_active",
-                "goal": "improve_general_health",
-            },
-        ),
-        (
-            "post",
             "/v1/plans/generate",
             {
                 "profile": {
@@ -97,7 +85,6 @@ def test_vision_identify_returns_mock_response() -> None:
 
 def test_v1_get_endpoints_return_mock_responses() -> None:
     for path, expected_id_field in [
-        ("/v1/profile/profile_stub_001", "profile_id"),
         ("/v1/recipes/recipe_stub_001", "recipe_id"),
         ("/v1/plans/plan_stub_001", "plan_id"),
     ]:
@@ -105,3 +92,24 @@ def test_v1_get_endpoints_return_mock_responses() -> None:
 
         assert response.status_code == 200, (path, response.text)
         assert expected_id_field in response.json()
+
+
+def test_profile_endpoints_require_authentication() -> None:
+    response_update = client.post(
+        "/v1/profile/update",
+        json={
+            "age": 30,
+            "sex": "male",
+            "height_cm": 175,
+            "weight_kg": 80,
+            "activity_level": "moderately_active",
+            "goal": "improve_general_health",
+            "allergens": [],
+            "dietary_restrictions": [],
+            "budget_limit_egp": None,
+        },
+    )
+    response_get = client.get("/v1/profile/me")
+
+    assert response_update.status_code == 401
+    assert response_get.status_code == 401

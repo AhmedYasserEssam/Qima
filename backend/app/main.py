@@ -1,6 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.v1.exception_handlers import (
+    http_exception_handler,
+    request_validation_exception_handler,
+)
 from app.api.v1.router import api_router
 from app.api.v1.endpoints.health import router as health_router
 
@@ -23,3 +28,5 @@ app.add_middleware(
 
 app.include_router(health_router, tags=["health"])
 app.include_router(api_router)
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
