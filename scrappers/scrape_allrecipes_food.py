@@ -5,6 +5,7 @@ import json
 import logging
 import random
 import re
+import runpy
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -25,6 +26,7 @@ SOURCE_NAME = "Allrecipes"
 ROBOTS_URL = "https://www.allrecipes.com/robots.txt"
 SITEMAP_INDEX_URL = "https://www.allrecipes.com/sitemap.xml"
 DEFAULT_OUTPUT = Path("data/Recipes/allrecipes_recipes.jsonl")
+DEFAULT_CSV_OUTPUT = Path("data/Recipes/allrecipes_recipes.csv")
 
 SCRIPT_JSONLD_RE = re.compile(
     r"<script[^>]*type=[\"']application/ld\+json[\"'][^>]*>(.*?)</script>",
@@ -2155,9 +2157,51 @@ def write_jsonl(rows: Iterable[dict[str, Any]], output: Path) -> int:
     return count
 
 
+def _load_allrecipes_seed_helpers() -> dict[str, Any]:
+    repo_root = Path(__file__).resolve().parents[1]
+    seed_script = repo_root / "backend" / "scripts" / "seed_allrecipes_recipes.py"
+    if not seed_script.exists():
+        raise FileNotFoundError(f"Required loader script not found: {seed_script}")
+    return runpy.run_path(str(seed_script))
+
+
+def postprocess_jsonl_output(
+    jsonl_output: Path,
+    *,
+    csv_output: Path | None,
+    upsert_postgres: bool,
+    truncate_postgres: bool,
+    postgres_batch_size: int,
+) -> None:
+    if csv_output is None and not upsert_postgres:
+        return
+
+    helpers = _load_allrecipes_seed_helpers()
+    load_jsonl_rows = helpers["load_jsonl_rows"]
+    write_csv = helpers["write_csv"]
+    upsert_rows = helpers["upsert_rows"]
+
+    rows, raw_count = load_jsonl_rows(jsonl_output)
+    logging.info("Post-processing %s JSONL records (%s after dedupe).", raw_count, len(rows))
+
+    if csv_output is not None:
+        write_csv(rows, csv_output)
+        logging.info("Wrote %s rows to CSV: %s", len(rows), csv_output)
+
+    if upsert_postgres:
+        upserted = upsert_rows(rows, truncate=truncate_postgres, batch_size=postgres_batch_size)
+        logging.info("Upserted %s rows into allrecipes_recipes.", upserted)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Scrape Allrecipes recipe data and normalize into JSONL records.")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Output JSONL path.")
+    parser.add_argument(
+        "--csv-output",
+        type=Path,
+        default=DEFAULT_CSV_OUTPUT,
+        help="Output CSV path for flattened records.",
+    )
     parser.add_argument("--url", dest="urls", action="append", help="Specific recipe URL to scrape.")
     parser.add_argument("--max-urls", type=int, default=None, help="Maximum recipe URLs to process.")
     parser.add_argument("--delay", type=float, default=0.75, help="Delay between recipe fetches.")
@@ -2165,6 +2209,27 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout", type=float, default=45, help="Request timeout in seconds.")
     parser.add_argument("--retries", type=int, default=3, help="Retries per request.")
     parser.add_argument("--impersonate", default="chrome124", help="scrapling browser impersonation profile.")
+    parser.add_argument(
+        "--skip-csv",
+        action="store_true",
+        help="Skip CSV export after writing JSONL.",
+    )
+    parser.add_argument(
+        "--skip-postgres",
+        action="store_true",
+        help="Skip upserting records into Postgres after writing JSONL.",
+    )
+    parser.add_argument(
+        "--truncate-postgres",
+        action="store_true",
+        help="Truncate allrecipes_recipes before Postgres upsert.",
+    )
+    parser.add_argument(
+        "--postgres-batch-size",
+        type=int,
+        default=200,
+        help="Rows per Postgres upsert batch.",
+    )
     parser.add_argument(
         "--log-level",
         default="INFO",
@@ -2177,6 +2242,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.postgres_batch_size <= 0:
+        parser.error("--postgres-batch-size must be a positive integer.")
+
     logging.basicConfig(
         level=getattr(logging, args.log_level),
         format="%(asctime)s %(levelname)s %(message)s",
@@ -2185,6 +2253,14 @@ def main(argv: list[str] | None = None) -> int:
     logging.getLogger("scrapling").setLevel(logging.WARNING)
     try:
         count = write_jsonl(scrape_allrecipes(args), args.output)
+        csv_output = None if args.skip_csv else args.csv_output
+        postprocess_jsonl_output(
+            args.output,
+            csv_output=csv_output,
+            upsert_postgres=not args.skip_postgres,
+            truncate_postgres=args.truncate_postgres,
+            postgres_batch_size=args.postgres_batch_size,
+        )
     except KeyboardInterrupt:
         logging.error("Interrupted")
         return 130
