@@ -16,6 +16,15 @@ Required:
 
 - `DATABASE_URL`
 
+Required for `/v1/vision/identify`:
+
+- `GEMINI_API_KEY`
+
+Optional Gemini tuning:
+
+- `GEMINI_REQUEST_TIMEOUT_SECONDS` (default: `20`)
+- `GEMINI_INLINE_IMAGE_MAX_BYTES` (default: `18000000`)
+
 Driver behavior:
 
 - prefers `psycopg` when installed

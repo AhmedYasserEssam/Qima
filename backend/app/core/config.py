@@ -49,6 +49,16 @@ class Settings(BaseSettings):
     smtp_password: str = Field(default="", alias="SMTP_PASSWORD")
     smtp_use_tls: bool = Field(default=True, alias="SMTP_USE_TLS")
 
+    gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
+    gemini_request_timeout_seconds: float = Field(
+        default=20.0,
+        alias="GEMINI_REQUEST_TIMEOUT_SECONDS",
+    )
+    gemini_inline_image_max_bytes: int = Field(
+        default=18_000_000,
+        alias="GEMINI_INLINE_IMAGE_MAX_BYTES",
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

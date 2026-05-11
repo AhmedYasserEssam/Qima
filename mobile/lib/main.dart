@@ -1043,10 +1043,17 @@ class ApiClient {
     required List<String> requiredFields,
   }) async {
     try {
+      final imageBytes = await image.readAsBytes();
       final request = http.MultipartRequest('POST', _uri(path))
         ..headers.addAll(_headers())
         ..fields['locale'] = 'en'
-        ..files.add(await http.MultipartFile.fromPath('image', image.path));
+        ..files.add(
+          http.MultipartFile.fromBytes(
+            'image',
+            imageBytes,
+            filename: image.name,
+          ),
+        );
       final streamed = await client.send(request).timeout(uploadTimeout);
       final response = await http.Response.fromStream(streamed);
       return _parseResponse(response, requiredFields);
