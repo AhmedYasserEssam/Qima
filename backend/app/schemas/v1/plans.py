@@ -2,7 +2,14 @@ from datetime import datetime
 from enum import Enum
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 
 class StrictBaseModel(BaseModel):
@@ -107,6 +114,7 @@ class ExclusionFlag(str, Enum):
 class TimeHorizon(str, Enum):
     SINGLE_DAY = "single_day"
     SINGLE_MEAL = "single_meal"
+    MULTI_DAY = "multi_day"
 
 
 class SupportStatusValue(str, Enum):
@@ -130,6 +138,12 @@ class MealType(str, Enum):
 
 class Currency(str, Enum):
     EGP = "EGP"
+
+
+class BudgetTier(str, Enum):
+    LOW = "low"
+    MID = "mid"
+    HIGH = "high"
 
 
 class EstimateQuality(str, Enum):
@@ -187,15 +201,58 @@ class PantryItem(StrictBaseModel):
 
 
 class BudgetConstraint(StrictBaseModel):
-    max_total_cost: float | None = Field(default=None, ge=0)
+    max_total_cost: float | BudgetTier | None = None
     currency: Currency
     geography: str | None = None
+
+    @field_validator("max_total_cost")
+    @classmethod
+    def validate_max_total_cost(
+        cls,
+        value: float | BudgetTier | None,
+    ) -> float | BudgetTier | None:
+        if isinstance(value, (int, float)) and value < 0:
+            raise ValueError("max_total_cost must be non-negative")
+        return value
 
 
 class PlanPreferences(StrictBaseModel):
     meal_count: int | None = Field(default=None, ge=1, le=6)
+    meals_per_day: int | None = Field(default=None, ge=1, le=6)
+    plan_days: int | None = Field(default=None, ge=1, le=14)
     include_snacks: bool | None = None
     time_horizon: TimeHorizon | None = None
+
+
+class SafetyChecks(StrictBaseModel):
+    pregnant: bool = False
+    breastfeeding: bool = False
+    eating_disorder_history: bool = False
+    under_18: bool = False
+    medical_condition_affects_diet: bool = False
+    abnormal_labs_or_health_concerns: bool = False
+    none_of_above: bool = False
+
+    @property
+    def has_exclusion(self) -> bool:
+        return any(
+            [
+                self.pregnant,
+                self.breastfeeding,
+                self.eating_disorder_history,
+                self.under_18,
+                self.medical_condition_affects_diet,
+                self.abnormal_labs_or_health_concerns,
+            ]
+        )
+
+    @model_validator(mode="after")
+    def validate_completion(self) -> "SafetyChecks":
+        if self.none_of_above and self.has_exclusion:
+            raise ValueError("none_of_above cannot be selected with another safety option")
+        if not self.none_of_above and not self.has_exclusion:
+            raise ValueError("Complete the safety screening before continuing")
+        return self
 
 
 class PlansGenerateRequest(StrictBaseModel):
@@ -203,6 +260,8 @@ class PlansGenerateRequest(StrictBaseModel):
     profile: Profile | None = None
     pantry: list[PantryItem] | None = None
     budget: BudgetConstraint | None = None
+    disliked_foods: list[NonEmptyString] = Field(default_factory=list)
+    safety_checks: SafetyChecks | None = None
     dietary_filters: list[DietaryFilter] = Field(default_factory=list)
     plan_preferences: PlanPreferences | None = None
 

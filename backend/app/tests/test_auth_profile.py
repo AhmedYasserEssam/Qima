@@ -30,6 +30,18 @@ def _signup_payload(email: str, *, name: str = "Test User") -> dict[str, str]:
     }
 
 
+def _safety_none_payload() -> dict[str, bool]:
+    return {
+        "pregnant": False,
+        "breastfeeding": False,
+        "eating_disorder_history": False,
+        "under_18": False,
+        "medical_condition_affects_diet": False,
+        "abnormal_labs_or_health_concerns": False,
+        "none_of_above": True,
+    }
+
+
 def _cleanup_user(email: str) -> None:
     normalized = email.strip().lower()
     init_db()
@@ -230,13 +242,16 @@ def test_profile_create_update_and_me_for_authenticated_user() -> None:
             "goal": "improve_general_health",
             "allergens": ["Milk", " milk ", "PEANUT"],
             "dietary_restrictions": ["Halal", " halal ", "Low_Sodium"],
-            "budget_limit_egp": 2500.0,
+            "safety_screening": _safety_none_payload(),
+            "agreement_accepted": True,
         }
         create_response = client.post("/v1/profile/update", json=create_payload, headers=headers)
         assert create_response.status_code == 200
         body = create_response.json()
         assert body["allergens"] == ["milk", "peanut"]
         assert body["dietary_restrictions"] == ["halal", "low_sodium"]
+        assert body["safety_screening"]["none_of_above"] is True
+        assert body["agreement_accepted"] is True
 
         update_payload = {
             "age": 30,
@@ -247,7 +262,12 @@ def test_profile_create_update_and_me_for_authenticated_user() -> None:
             "goal": "reduce_sugar",
             "allergens": ["sesame"],
             "dietary_restrictions": ["vegetarian"],
-            "budget_limit_egp": None,
+            "safety_screening": {
+                **_safety_none_payload(),
+                "none_of_above": False,
+                "medical_condition_affects_diet": True,
+            },
+            "agreement_accepted": True,
         }
         update_response = client.post("/v1/profile/update", json=update_payload, headers=headers)
         assert update_response.status_code == 200
@@ -256,13 +276,15 @@ def test_profile_create_update_and_me_for_authenticated_user() -> None:
         assert updated["allergens"] == ["sesame"]
         assert updated["dietary_restrictions"] == ["vegetarian"]
         assert updated["goal"] == "reduce_sugar"
-        assert updated["budget_limit_egp"] is None
+        assert updated["safety_screening"]["medical_condition_affects_diet"] is True
+        assert updated["safety_screening"]["none_of_above"] is False
 
         me = client.get("/v1/profile/me", headers=headers)
         assert me.status_code == 200
         me_body = me.json()
         assert me_body["allergens"] == ["sesame"]
         assert me_body["dietary_restrictions"] == ["vegetarian"]
+        assert me_body["agreement_accepted"] is True
 
         with SessionLocal() as session:
             user = session.execute(select(User).where(User.email == email.lower())).scalar_one()

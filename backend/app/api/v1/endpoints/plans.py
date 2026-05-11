@@ -25,6 +25,13 @@ router = APIRouter()
     summary="Generate bounded goal-based meal guidance",
 )
 async def generate_plan(payload: PlansGenerateRequest) -> PlansGenerateSuccess:
+    if payload.safety_checks is not None and payload.safety_checks.has_exclusion:
+        return _mock_plan_response(
+            plan_id="plan_stub_001",
+            matched_ingredients=[item.name for item in payload.pantry or []],
+            supported=False,
+        )
+
     return _mock_plan_response(
         plan_id="plan_stub_001",
         matched_ingredients=[item.name for item in payload.pantry or []],
@@ -39,12 +46,29 @@ async def get_plan(plan_id: str) -> PlansGenerateSuccess:
 def _mock_plan_response(
     plan_id: str,
     matched_ingredients: list[str],
+    *,
+    supported: bool = True,
 ) -> PlansGenerateSuccess:
+    support_status = "supported" if supported else "unsupported"
+    support_reason = (
+        "Mock plan is within the general adult food-guidance boundary."
+        if supported
+        else "One or more safety checks require clinician-guided nutrition support."
+    )
+    safety_flags = [
+        "non_diagnostic",
+        "general_information_only",
+        "estimated_targets_only",
+        "estimated_cost_only",
+    ]
+    if not supported:
+        safety_flags.append("profile_exclusion_triggered")
+
     return PlansGenerateSuccess(
         plan_id=plan_id,
         support_status=SupportStatus(
-            status="supported",
-            reason="Mock plan is within the general adult food-guidance boundary.",
+            status=support_status,
+            reason=support_reason,
         ),
         nutrition_targets=NutritionTargets(
             calories_kcal=2200,
@@ -89,17 +113,19 @@ def _mock_plan_response(
             "Mock meals are ranked with pantry fit, estimated nutrition, estimated "
             "cost, and safety boundaries. This is general food guidance only."
         ),
-        safety_flags=[
-            "non_diagnostic",
-            "general_information_only",
-            "estimated_targets_only",
-            "estimated_cost_only",
-        ],
+        safety_flags=safety_flags,
         source=Source(
             provider="qima_backend",
             source_type="meal_plan_ranker",
             fetched_at=datetime.now(UTC),
         ),
         data_quality=DataQuality(completeness="partial"),
-        warnings=["Mock response. Not diagnosis, treatment, or clinical diet therapy."],
+        warnings=[
+            "Mock response. Not diagnosis, treatment, or clinical diet therapy.",
+            *(
+                ["Clinical safety check triggered. Please consult a qualified clinician."]
+                if not supported
+                else []
+            ),
+        ],
     )

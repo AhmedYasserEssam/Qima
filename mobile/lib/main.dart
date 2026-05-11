@@ -630,10 +630,11 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   final weightController = TextEditingController(text: '70');
   final allergensController = TextEditingController();
   final dietaryRestrictionsController = TextEditingController();
-  final budgetController = TextEditingController();
+  final safetyScreening = defaultSafetyScreening();
   String sex = 'male';
   String activity = 'moderately_active';
   String goal = 'improve_general_health';
+  bool agreementAccepted = false;
   bool busy = false;
   String? feedback;
   bool isError = false;
@@ -645,7 +646,6 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     weightController.dispose();
     allergensController.dispose();
     dietaryRestrictionsController.dispose();
-    budgetController.dispose();
     super.dispose();
   }
 
@@ -740,7 +740,6 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                           'reduce_sodium',
                           'reduce_saturated_fat',
                           'increase_fiber',
-                          'budget_friendly',
                         ]),
                         onChanged: (value) => setState(() => goal = value ?? goal),
                       ),
@@ -756,12 +755,16 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                           labelText: 'Dietary restrictions (comma-separated)',
                         ),
                       ),
-                      TextFormField(
-                        controller: budgetController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Budget limit EGP (optional)',
-                        ),
+                      const SizedBox(height: 16),
+                      SafetyScreeningSection(
+                        values: safetyScreening,
+                        onChanged: _setSafetyScreening,
+                      ),
+                      const SizedBox(height: 16),
+                      AgreementSection(
+                        accepted: agreementAccepted,
+                        onChanged: (value) =>
+                            setState(() => agreementAccepted = value),
                       ),
                       const SizedBox(height: 12),
                       FilledButton.icon(
@@ -819,7 +822,13 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
       await ref.read(apiClientProvider).post(
         '/v1/profile/update',
         body,
-        requiredFields: ['user_id', 'goal', 'updated_at'],
+        requiredFields: [
+          'user_id',
+          'goal',
+          'safety_screening',
+          'agreement_accepted',
+          'updated_at',
+        ],
       );
       await resolveAuthStage(ref);
       if (mounted) {
@@ -838,15 +847,20 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     final age = int.tryParse(ageController.text.trim());
     final height = double.tryParse(heightController.text.trim());
     final weight = double.tryParse(weightController.text.trim());
-    final budgetText = budgetController.text.trim();
-    final budget = budgetText.isEmpty ? null : double.tryParse(budgetText);
 
     if (age == null || age < 1 || height == null || weight == null) {
       showValidation(context, 'Please provide valid age, height, and weight.');
       return null;
     }
-    if (budgetText.isNotEmpty && (budget == null || budget <= 0)) {
-      showValidation(context, 'Budget limit must be a positive number.');
+    if (!safetyScreeningCompleted(safetyScreening)) {
+      showValidation(
+        context,
+        'Please complete the Safety Screening before continuing.',
+      );
+      return null;
+    }
+    if (!agreementAccepted) {
+      showValidation(context, agreementValidationMessage);
       return null;
     }
 
@@ -870,8 +884,13 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
       'goal': goal,
       'allergens': allergens,
       'dietary_restrictions': restrictions,
-      'budget_limit_egp': budget,
+      'safety_screening': safetyScreeningBody(safetyScreening),
+      'agreement_accepted': agreementAccepted,
     };
+  }
+
+  void _setSafetyScreening(String key, bool value) {
+    setState(() => updateSafetyScreening(safetyScreening, key, value));
   }
 
   void _setFeedback(String message, {bool isErrorValue = false}) {
@@ -958,6 +977,9 @@ class ApiClient {
     required this.authTokenReader,
   });
 
+  static const requestTimeout = Duration(seconds: 12);
+  static const uploadTimeout = Duration(seconds: 45);
+
   final String baseUrl;
   final http.Client client;
   final String? Function() authTokenReader;
@@ -981,10 +1003,14 @@ class ApiClient {
     required List<String> requiredFields,
   }) async {
     try {
-      final response = await client.get(_uri(path), headers: _headers());
+      final response = await client
+          .get(_uri(path), headers: _headers())
+          .timeout(requestTimeout);
       return _parseResponse(response, requiredFields);
     } on ApiFailure {
       rethrow;
+    } on TimeoutException {
+      throw ApiFailure.network('Request timed out after $requestTimeout.');
     } on Exception catch (error) {
       throw ApiFailure.network(error.toString());
     }
@@ -1000,10 +1026,12 @@ class ApiClient {
         _uri(path),
         headers: _headers(includeJsonContentType: true),
         body: jsonEncode(body),
-      );
+      ).timeout(requestTimeout);
       return _parseResponse(response, requiredFields);
     } on ApiFailure {
       rethrow;
+    } on TimeoutException {
+      throw ApiFailure.network('Request timed out after $requestTimeout.');
     } on Exception catch (error) {
       throw ApiFailure.network(error.toString());
     }
@@ -1019,11 +1047,13 @@ class ApiClient {
         ..headers.addAll(_headers())
         ..fields['locale'] = 'en'
         ..files.add(await http.MultipartFile.fromPath('image', image.path));
-      final streamed = await client.send(request);
+      final streamed = await client.send(request).timeout(uploadTimeout);
       final response = await http.Response.fromStream(streamed);
       return _parseResponse(response, requiredFields);
     } on ApiFailure {
       rethrow;
+    } on TimeoutException {
+      throw ApiFailure.network('Upload timed out after $uploadTimeout.');
     } on Exception catch (error) {
       throw ApiFailure.network(error.toString());
     }
@@ -1211,9 +1241,13 @@ class EndpointController extends StateNotifier<AsyncValue<ApiPayload>?> {
 
   final ApiClient _client;
 
-  Future<void> run(Future<ApiPayload> Function(ApiClient client) action) async {
+  Future<ApiPayload?> run(
+    Future<ApiPayload> Function(ApiClient client) action,
+  ) async {
     state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() => action(_client));
+    final nextState = await AsyncValue.guard(() => action(_client));
+    state = nextState;
+    return nextState.valueOrNull;
   }
 
   void clear() => state = null;
@@ -1746,15 +1780,53 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  final ageController = TextEditingController(text: '30');
-  final heightController = TextEditingController(text: '170');
-  final weightController = TextEditingController(text: '70');
+  static const _sexOptions = ['male', 'female'];
+  static const _activityOptions = [
+    'sedentary',
+    'lightly_active',
+    'moderately_active',
+    'very_active',
+    'athlete',
+  ];
+  static const _goalOptions = [
+    'lose_weight',
+    'maintain_weight',
+    'gain_weight',
+    'build_muscle',
+    'improve_general_health',
+    'eat_high_protein',
+    'eat_low_calorie',
+    'eat_balanced',
+    'reduce_sugar',
+    'reduce_sodium',
+    'reduce_saturated_fat',
+    'increase_fiber',
+  ];
+
+  final ageController = TextEditingController();
+  final heightController = TextEditingController();
+  final weightController = TextEditingController();
   final allergensController = TextEditingController();
   final dietaryRestrictionsController = TextEditingController();
-  final budgetController = TextEditingController();
+  final safetyScreening = defaultSafetyScreening();
   String sex = 'male';
   String activity = 'moderately_active';
   String goal = 'improve_general_health';
+  bool agreementAccepted = false;
+  bool profileLoaded = false;
+  bool loadingProfile = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      ref.read(profileControllerProvider.notifier).clear();
+      unawaited(_loadProfile());
+    });
+  }
 
   @override
   void dispose() {
@@ -1763,12 +1835,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     weightController.dispose();
     allergensController.dispose();
     dietaryRestrictionsController.dispose();
-    budgetController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final profileState = ref.watch(profileControllerProvider);
+    final isBusy = loadingProfile || (profileState?.isLoading ?? false);
+    final canEdit = !loadingProfile;
     return EndpointPage(
       title: 'Profile',
       children: [
@@ -1783,85 +1857,84 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (!profileLoaded && isBusy) ...[
+                const LinearProgressIndicator(),
+                const SizedBox(height: 12),
+              ],
               TextFormField(
                 controller: ageController,
+                enabled: canEdit,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(labelText: 'Age years'),
               ),
               TextFormField(
                 controller: heightController,
+                enabled: canEdit,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(labelText: 'Height cm'),
               ),
               TextFormField(
                 controller: weightController,
+                enabled: canEdit,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(labelText: 'Weight kg'),
               ),
               DropdownButtonFormField<String>(
+                key: ValueKey('sex-$sex'),
                 initialValue: sex,
                 decoration: const InputDecoration(labelText: 'Sex'),
-                items: options([
-                  'male',
-                  'female',
-                ]),
-                onChanged: (value) => setState(() => sex = value ?? sex),
+                items: options(_sexOptions),
+                onChanged: canEdit
+                    ? (value) => setState(() => sex = value ?? sex)
+                    : null,
               ),
               DropdownButtonFormField<String>(
+                key: ValueKey('activity-$activity'),
                 initialValue: activity,
                 decoration: const InputDecoration(labelText: 'Activity level'),
-                items: options([
-                  'sedentary',
-                  'lightly_active',
-                  'moderately_active',
-                  'very_active',
-                  'athlete',
-                ]),
-                onChanged: (value) =>
-                    setState(() => activity = value ?? activity),
+                items: options(_activityOptions),
+                onChanged: canEdit
+                    ? (value) => setState(() => activity = value ?? activity)
+                    : null,
               ),
               DropdownButtonFormField<String>(
+                key: ValueKey('goal-$goal'),
                 initialValue: goal,
                 decoration: const InputDecoration(labelText: 'Goal'),
-                items: options([
-                  'lose_weight',
-                  'maintain_weight',
-                  'gain_weight',
-                  'build_muscle',
-                  'improve_general_health',
-                  'eat_high_protein',
-                  'eat_low_calorie',
-                  'eat_balanced',
-                  'reduce_sugar',
-                  'reduce_sodium',
-                  'reduce_saturated_fat',
-                  'increase_fiber',
-                  'budget_friendly',
-                ]),
-                onChanged: (value) => setState(() => goal = value ?? goal),
+                items: options(_goalOptions),
+                onChanged: canEdit
+                    ? (value) => setState(() => goal = value ?? goal)
+                    : null,
               ),
               TextFormField(
                 controller: allergensController,
+                enabled: canEdit,
                 decoration: const InputDecoration(
                   labelText: 'Allergens (comma-separated)',
                 ),
               ),
               TextFormField(
                 controller: dietaryRestrictionsController,
+                enabled: canEdit,
                 decoration: const InputDecoration(
                   labelText: 'Dietary restrictions (comma-separated)',
                 ),
               ),
-              TextFormField(
-                controller: budgetController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Budget limit EGP (optional)',
-                ),
+              const SizedBox(height: 16),
+              SafetyScreeningSection(
+                values: safetyScreening,
+                onChanged: _setSafetyScreening,
+              ),
+              const SizedBox(height: 16),
+              AgreementSection(
+                accepted: agreementAccepted,
+                onChanged: canEdit
+                    ? (value) => setState(() => agreementAccepted = value)
+                    : null,
               ),
               const SizedBox(height: 8),
               FilledButton.icon(
-                onPressed: _saveProfile,
+                onPressed: canEdit ? _saveProfile : null,
                 icon: const Icon(Icons.save_outlined),
                 label: const Text('Save profile'),
               ),
@@ -1869,20 +1942,81 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
         ),
         AsyncPayloadView(
-          title: 'Profile response',
-          value: ref.watch(profileControllerProvider),
-          onRetry: _saveProfile,
+          title: 'Current profile',
+          value: profileState,
+          onRetry: _loadProfile,
         ),
       ],
     );
+  }
+
+  Future<void> _loadProfile() async {
+    if (mounted) {
+      setState(() => loadingProfile = true);
+    }
+    try {
+      final payload = await ref
+          .read(profileControllerProvider.notifier)
+          .run(
+            (client) => client.get(
+              '/v1/profile/me',
+              requiredFields: [
+                'user_id',
+                'age',
+                'sex',
+                'height_cm',
+                'weight_kg',
+                'activity_level',
+                'goal',
+                'safety_screening',
+                'agreement_accepted',
+                'updated_at',
+              ],
+            ),
+          )
+          .timeout(ApiClient.requestTimeout + const Duration(seconds: 2));
+
+      if (!mounted || payload == null) {
+        return;
+      }
+      _applyProfile(payload.raw);
+    } on TimeoutException {
+      if (mounted) {
+        showValidation(context, 'Profile request timed out. Check that the backend is running.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => loadingProfile = false);
+      }
+    }
+  }
+
+  void _applyProfile(Map<String, Object?> profile) {
+    setState(() {
+      ageController.text = inputNumberText(profile['age']);
+      heightController.text = inputNumberText(profile['height_cm']);
+      weightController.text = inputNumberText(profile['weight_kg']);
+      allergensController.text = commaSeparatedText(profile['allergens']);
+      dietaryRestrictionsController.text = commaSeparatedText(
+        profile['dietary_restrictions'],
+      );
+      sex = optionFromProfile(profile['sex'], _sexOptions, fallback: sex);
+      activity = optionFromProfile(
+        profile['activity_level'],
+        _activityOptions,
+        fallback: activity,
+      );
+      goal = optionFromProfile(profile['goal'], _goalOptions, fallback: goal);
+      applySafetyScreeningFromProfile(safetyScreening, profile['safety_screening']);
+      agreementAccepted = profile['agreement_accepted'] == true;
+      profileLoaded = true;
+    });
   }
 
   Map<String, Object?>? _profileBody() {
     final age = int.tryParse(ageController.text.trim());
     final height = double.tryParse(heightController.text.trim());
     final weight = double.tryParse(weightController.text.trim());
-    final budgetText = budgetController.text.trim();
-    final budget = budgetText.isEmpty ? null : double.tryParse(budgetText);
     if (age == null || age < 1 || height == null || weight == null) {
       showValidation(
         context,
@@ -1890,8 +2024,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       );
       return null;
     }
-    if (budgetText.isNotEmpty && (budget == null || budget <= 0)) {
-      showValidation(context, 'Budget limit must be a positive number.');
+    if (!safetyScreeningCompleted(safetyScreening)) {
+      showValidation(
+        context,
+        'Please complete the Safety Screening before continuing.',
+      );
+      return null;
+    }
+    if (!agreementAccepted) {
+      showValidation(context, agreementValidationMessage);
       return null;
     }
 
@@ -1915,7 +2056,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       'goal': goal,
       'allergens': allergens,
       'dietary_restrictions': restrictions,
-      'budget_limit_egp': budget,
+      'safety_screening': safetyScreeningBody(safetyScreening),
+      'agreement_accepted': agreementAccepted,
     };
     return body;
   }
@@ -1925,19 +2067,42 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (body == null) {
       return;
     }
-    await ref
-        .read(profileControllerProvider.notifier)
-        .run(
-          (client) => client.post(
-            '/v1/profile/update',
-            body,
-            requiredFields: [
-              'user_id',
-              'goal',
-              'updated_at',
-            ],
-          ),
-        );
+    setState(() => loadingProfile = true);
+    try {
+      final payload = await ref
+          .read(profileControllerProvider.notifier)
+          .run(
+            (client) => client.post(
+              '/v1/profile/update',
+              body,
+              requiredFields: [
+                'user_id',
+                'goal',
+                'safety_screening',
+                'agreement_accepted',
+                'updated_at',
+              ],
+            ),
+          )
+          .timeout(ApiClient.requestTimeout + const Duration(seconds: 2));
+      if (!mounted || payload == null) {
+        return;
+      }
+      _applyProfile(payload.raw);
+      showValidation(context, 'Profile updated.');
+    } on TimeoutException {
+      if (mounted) {
+        showValidation(context, 'Saving profile timed out. Please retry.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => loadingProfile = false);
+      }
+    }
+  }
+
+  void _setSafetyScreening(String key, bool value) {
+    setState(() => updateSafetyScreening(safetyScreening, key, value));
   }
 }
 
@@ -1949,111 +2114,215 @@ class PlanScreen extends ConsumerStatefulWidget {
 }
 
 class _PlanScreenState extends ConsumerState<PlanScreen> {
-  final pantryController = TextEditingController(text: 'rice, lentils');
-  final budgetController = TextEditingController(text: '120');
-  bool useInlineProfile = false;
+  final dislikedFoodsController = TextEditingController();
+  final mealsPerDayController = TextEditingController(text: '3');
+  final planDaysController = TextEditingController(text: '7');
+  String budgetLevel = 'mid';
+  String? eligibilityChoice;
+  bool planDisclaimerAccepted = false;
+  bool loadingProfile = false;
+  Map<String, Object?>? currentProfile;
+  String? profileLoadError;
+
+  bool get canGenerateNutritionPlan {
+    return eligibilityChoice == planEligibilityHealthy &&
+        planDisclaimerAccepted &&
+        !loadingProfile;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      unawaited(_loadProfile());
+    });
+  }
 
   @override
   void dispose() {
-    pantryController.dispose();
-    budgetController.dispose();
+    dislikedFoodsController.dispose();
+    mealsPerDayController.dispose();
+    planDaysController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final profileId = ref.watch(profileIdProvider);
+    final canEditPlanInputs = !loadingProfile;
     return EndpointPage(
-      title: 'Plan',
+      title: 'Nutrition Plan',
       children: [
-        NoticeCard(
-          icon: Icons.health_and_safety_outlined,
-          title: 'Safety boundary',
-          message: 'Meal guidance is for generally healthy adults.',
+        InputCard(
+          title: 'Before we create your plan',
+          child: const Text(
+            'Qima can create nutrition plans for generally healthy adults. Some cases need professional nutrition support instead.',
+          ),
+        ),
+        PlanEligibilitySection(
+          selectedValue: eligibilityChoice,
+          onChanged: (value) => setState(() => eligibilityChoice = value),
         ),
         InputCard(
-          title: 'Generate meal plan',
+          title: 'Plan preferences',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Use inline mock profile'),
-                subtitle: Text(
-                  profileId == null
-                      ? 'No cached profile_id. Inline profile is required.'
-                      : 'Cached profile_id: $profileId',
+              if (loadingProfile) ...[
+                const LinearProgressIndicator(),
+                const SizedBox(height: 12),
+              ],
+              if (profileLoadError != null) ...[
+                Text(
+                  profileLoadError!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
-                value: useInlineProfile || profileId == null,
-                onChanged: (value) => setState(() => useInlineProfile = value),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _loadProfile,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry profile load'),
+                ),
+                const SizedBox(height: 8),
+              ],
+              DropdownButtonFormField<String>(
+                initialValue: budgetLevel,
+                decoration: const InputDecoration(labelText: 'Budget level'),
+                items: options(['low', 'mid', 'high']),
+                onChanged: canEditPlanInputs
+                    ? (value) => setState(() => budgetLevel = value ?? budgetLevel)
+                    : null,
               ),
               TextFormField(
-                controller: pantryController,
-                decoration: const InputDecoration(labelText: 'Pantry items'),
-              ),
-              TextFormField(
-                controller: budgetController,
-                keyboardType: TextInputType.number,
+                controller: dislikedFoodsController,
+                enabled: canEditPlanInputs,
                 decoration: const InputDecoration(
-                  labelText: 'Max total cost EGP',
+                  labelText: 'Disliked foods',
+                  hintText: 'tuna, eggplant',
                 ),
               ),
-              const SizedBox(height: 8),
-              FilledButton.icon(
-                onPressed: _generate,
-                icon: const Icon(Icons.event_note_outlined),
-                label: const Text('Generate plan'),
+              TextFormField(
+                controller: mealsPerDayController,
+                enabled: canEditPlanInputs,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Meals per day'),
+              ),
+              TextFormField(
+                controller: planDaysController,
+                enabled: canEditPlanInputs,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Plan days'),
               ),
             ],
           ),
         ),
+        PlanDisclaimerCard(
+          accepted: planDisclaimerAccepted,
+          onChanged: (value) => setState(() => planDisclaimerAccepted = value),
+        ),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: canGenerateNutritionPlan ? null : _showPlanGateMessage,
+          child: FilledButton.icon(
+            onPressed: canGenerateNutritionPlan ? _generate : null,
+            icon: const Icon(Icons.event_note_outlined),
+            label: const Text('Generate nutrition plan'),
+          ),
+        ),
+        OutlinedButton.icon(
+          onPressed: _generateRecipesInstead,
+          icon: const Icon(Icons.restaurant_menu_outlined),
+          label: const Text('Generate recipes instead'),
+        ),
         AsyncPayloadView(
-          title: 'Plan response',
+          title: 'Nutrition plan response',
           value: ref.watch(planControllerProvider),
           onRetry: _generate,
         ),
+        const SizedBox(height: 72),
       ],
     );
   }
 
+  Future<void> _loadProfile() async {
+    setState(() {
+      loadingProfile = true;
+      profileLoadError = null;
+    });
+    try {
+      final payload = await ref.read(apiClientProvider).get(
+        '/v1/profile/me',
+        requiredFields: [
+          'user_id',
+          'age',
+          'sex',
+          'height_cm',
+          'weight_kg',
+          'activity_level',
+          'goal',
+        ],
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() => currentProfile = payload.raw);
+    } on ApiFailure catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => profileLoadError = error.message);
+    } finally {
+      if (mounted) {
+        setState(() => loadingProfile = false);
+      }
+    }
+  }
+
   void _generate() {
-    final profileId = ref.read(profileIdProvider);
-    final budget = double.tryParse(budgetController.text.trim());
-    final pantry = pantryController.text
+    if (!_validatePlanGate()) {
+      return;
+    }
+    final profile = _planProfileFromSavedProfile();
+    if (profile == null) {
+      showValidation(context, 'Load or complete your profile before generating a plan.');
+      return;
+    }
+    final mealsPerDay = int.tryParse(mealsPerDayController.text.trim());
+    final planDays = int.tryParse(planDaysController.text.trim());
+    if (mealsPerDay == null || mealsPerDay < 1 || mealsPerDay > 6) {
+      showValidation(context, 'Meals per day must be between 1 and 6.');
+      return;
+    }
+    if (planDays == null || planDays < 1 || planDays > 14) {
+      showValidation(context, 'Plan days must be between 1 and 14.');
+      return;
+    }
+    final dislikedFoods = dislikedFoodsController.text
         .split(',')
         .map((item) => item.trim())
         .where((item) => item.isNotEmpty)
-        .map((name) => {'name': name})
         .toList();
-    if (profileId == null && !useInlineProfile) {
-      showValidation(context, 'Save a profile or enable inline mock profile.');
-      return;
-    }
     final body = <String, Object?>{
-      if (profileId != null && !useInlineProfile) 'profile_id': profileId,
-      if (profileId == null || useInlineProfile)
-        'profile': {
-          'age_years': 30,
-          'sex': 'prefer_not_to_say',
-          'height_cm': 170,
-          'weight_kg': 70,
-          'activity_level': 'moderately_active',
-          'goal': 'improve_general_health',
-          'allergens': <String>[],
-          'dietary_exclusions': <String>[],
-          'exclusion_flags': <String>[],
-        },
-      'pantry': pantry,
+      'profile': profile,
+      'safety_checks': _safetyChecksBody(),
       'budget': {
-        'max_total_cost': budget,
+        'max_total_cost': budgetLevel,
         'currency': 'EGP',
         'geography': 'Cairo',
       },
-      'dietary_filters': ['budget_friendly', 'egyptian_foods'],
+      'disliked_foods': dislikedFoods,
+      'dietary_filters': [
+        if (budgetLevel == 'low') 'budget_friendly',
+        'egyptian_foods',
+      ],
       'plan_preferences': {
-        'meal_count': 3,
-        'include_snacks': false,
-        'time_horizon': 'single_day',
+        'meal_count': mealsPerDay,
+        'meals_per_day': mealsPerDay,
+        'plan_days': planDays,
+        'include_snacks': mealsPerDay > 3,
+        'time_horizon': planDays > 1 ? 'multi_day' : 'single_day',
       },
     };
     ref
@@ -2071,6 +2340,166 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
             ],
           ),
         );
+  }
+
+  bool _validatePlanGate() {
+    if (eligibilityChoice == null) {
+      showValidation(
+        context,
+        'Please choose whether Qima can create a nutrition plan for you.',
+      );
+      return false;
+    }
+    if (eligibilityChoice == planEligibilityRestricted) {
+      showValidation(
+        context,
+        'Nutrition plans are only available for generally healthy adults. You can still generate recipes instead.',
+      );
+      return false;
+    }
+    if (!planDisclaimerAccepted) {
+      showValidation(
+        context,
+        'You must agree to the Qima AI Nutrition Disclaimer before generating a nutrition plan.',
+      );
+      return false;
+    }
+    if (loadingProfile) {
+      showValidation(context, 'Profile is still loading. Please wait a moment.');
+      return false;
+    }
+    return true;
+  }
+
+  void _showPlanGateMessage() {
+    _validatePlanGate();
+  }
+
+  void _generateRecipesInstead() {
+    context.go('/recipes');
+  }
+
+  Map<String, Object?> _safetyChecksBody() {
+    return {
+      'pregnant': false,
+      'breastfeeding': false,
+      'eating_disorder_history': false,
+      'under_18': false,
+      'medical_condition_affects_diet': false,
+      'abnormal_labs_or_health_concerns': false,
+      'none_of_above': true,
+    };
+  }
+
+  Map<String, Object?>? _planProfileFromSavedProfile() {
+    final profile = currentProfile;
+    if (profile == null) {
+      return null;
+    }
+    final age = number(profile['age'])?.round();
+    final height = number(profile['height_cm']);
+    final weight = number(profile['weight_kg']);
+    if (age == null || age < 18 || height == null || weight == null) {
+      return null;
+    }
+    return {
+      'age_years': age,
+      'sex': optionFromProfile(
+        profile['sex'],
+        ['male', 'female', 'other', 'prefer_not_to_say'],
+        fallback: 'prefer_not_to_say',
+      ),
+      'height_cm': height,
+      'weight_kg': weight,
+      'activity_level': optionFromProfile(
+        profile['activity_level'],
+        [
+          'sedentary',
+          'lightly_active',
+          'moderately_active',
+          'very_active',
+          'athlete',
+        ],
+        fallback: 'moderately_active',
+      ),
+      'goal': _planGoal(profile['goal']),
+      'allergens': _planAllergens(profile['allergens']),
+      'dietary_exclusions': _planDietaryExclusions(
+        profile['dietary_restrictions'],
+      ),
+      'exclusion_flags': <String>[],
+    };
+  }
+
+  String _planGoal(Object? value) {
+    switch (text(value, fallback: '').trim()) {
+      case 'lose_weight':
+      case 'eat_low_calorie':
+        return 'lose_weight';
+      case 'build_muscle':
+      case 'eat_high_protein':
+      case 'gain_weight':
+        return 'gain_muscle';
+      case 'maintain_weight':
+        return 'maintain_weight';
+      default:
+        return 'improve_general_health';
+    }
+  }
+
+  List<String> _planAllergens(Object? value) {
+    if (value is! List) {
+      return <String>[];
+    }
+    final mapped = <String>{};
+    for (final item in value) {
+      final normalized = text(item, fallback: '').trim().toLowerCase();
+      switch (normalized) {
+        case 'milk':
+        case 'egg':
+        case 'fish':
+        case 'shellfish':
+        case 'wheat':
+        case 'soy':
+        case 'sesame':
+          mapped.add(normalized);
+        case 'peanut':
+        case 'peanuts':
+          mapped.add('peanuts');
+        case 'tree_nut':
+        case 'tree_nuts':
+        case 'nuts':
+          mapped.add('tree_nuts');
+      }
+    }
+    return mapped.toList();
+  }
+
+  List<String> _planDietaryExclusions(Object? value) {
+    if (value is! List) {
+      return <String>[];
+    }
+    final exclusions = <String>{};
+    for (final item in value) {
+      final normalized = text(item, fallback: '').trim().toLowerCase();
+      switch (normalized) {
+        case 'halal':
+          exclusions.addAll(['pork', 'alcohol']);
+        case 'vegetarian':
+          exclusions.addAll(['meat', 'poultry', 'fish', 'shellfish']);
+        case 'vegan':
+          exclusions.addAll(['meat', 'poultry', 'fish', 'shellfish', 'dairy', 'eggs']);
+        case 'dairy_free':
+          exclusions.add('dairy');
+        case 'egg_free':
+          exclusions.add('eggs');
+        case 'gluten_free':
+          exclusions.add('gluten');
+        case 'low_sodium':
+          exclusions.add('high_sodium');
+      }
+    }
+    return exclusions.toList();
   }
 }
 
@@ -2745,6 +3174,361 @@ class NoticeCard extends StatelessWidget {
   }
 }
 
+const safetyRestrictionMessage =
+    'Qima can still provide general food information, but personalized meal plans may not be available for this profile because Qima is not a medical or clinical nutrition service.';
+
+const agreementValidationMessage =
+    'You must read and agree to the Qima AI Nutrition Disclaimer & User Agreement before continuing.';
+
+const qimaAgreementText = '''
+By using Qima, you acknowledge and agree to the following:
+
+Qima is an AI-powered nutrition and grocery assistant. It provides estimated nutrition information, recipe suggestions, product comparisons, price-aware guidance, and general food-related recommendations based on available data sources, user inputs, and AI-generated analysis.
+
+Qima is not a doctor, dietitian, nutritionist, pharmacist, or medical service. The information provided by Qima is for general informational and educational purposes only and must not be used as a substitute for professional medical, nutritional, or dietary advice.
+
+Qima may use AI models and external data sources to generate responses. Because AI systems and food databases can be incomplete, outdated, inaccurate, or uncertain, Qima's outputs may contain errors. You must not rely on Qima as a 100% accurate source for medical decisions, diagnosis or treatment, allergy safety, pregnancy or breastfeeding nutrition, eating disorder support, clinical diet planning, lab test interpretation, emergency health decisions, exact calorie or nutrient values, or exact food prices.
+
+Food labels, ingredient lists, allergen information, nutrition values, prices, and recipe data may be missing, outdated, or incorrect. Always verify product packaging, allergen labels, and medical concerns directly with trusted sources or qualified professionals.
+
+If you have a medical condition, allergy, pregnancy, breastfeeding status, eating disorder history, abnormal lab results, or any health-related concern, you should consult a qualified healthcare professional before following any recommendation from Qima.
+
+Qima may provide estimated calorie needs, meal plans, or food suggestions based on your profile information. These estimates are not personalized medical advice and may not be suitable for every person.
+
+Qima does not guarantee that any suggested food, ingredient, recipe, or meal plan is safe, accurate, complete, affordable, available, or suitable for your needs.
+
+By continuing, you confirm that:
+- You understand Qima provides AI-generated informational guidance only.
+- You understand Qima may be inaccurate or incomplete.
+- You will verify important information yourself.
+- You will not rely on Qima for medical, allergy, pregnancy, breastfeeding, eating disorder, or emergency decisions.
+- You accept responsibility for your own food choices and health-related decisions.
+''';
+
+const planEligibilityHealthy = 'generally_healthy';
+const planEligibilityRestricted = 'needs_professional_support';
+
+class PlanEligibilitySection extends StatelessWidget {
+  const PlanEligibilitySection({
+    super.key,
+    required this.selectedValue,
+    required this.onChanged,
+  });
+
+  final String? selectedValue;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasRestriction = selectedValue == planEligibilityRestricted;
+    return InputCard(
+      title: 'Choose one',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PlanChoiceTile(
+            title: 'I am generally healthy',
+            description:
+                'None of these apply to me: under 18, pregnant, breastfeeding, eating disorder history, medical condition affecting diet, or abnormal lab results/health concerns.',
+            selected: selectedValue == planEligibilityHealthy,
+            onTap: () => onChanged(planEligibilityHealthy),
+          ),
+          const SizedBox(height: 8),
+          PlanChoiceTile(
+            title: 'One of these applies to me',
+            description:
+                'Qima will not create a personalized nutrition plan for this profile, but you can still generate recipes and view general food information.',
+            selected: hasRestriction,
+            onTap: () => onChanged(planEligibilityRestricted),
+          ),
+          if (hasRestriction) ...[
+            const SizedBox(height: 8),
+            const NoticeCard(
+              icon: Icons.info_outline,
+              title: 'Nutrition plan unavailable',
+              message:
+                  'Personalized nutrition plans are not available for this profile. You can still generate recipes and view general food information.',
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class PlanChoiceTile extends StatelessWidget {
+  const PlanChoiceTile({
+    super.key,
+    required this.title,
+    required this.description,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String title;
+  final String description;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final borderColor = selected
+        ? colorScheme.primary
+        : colorScheme.outlineVariant;
+    return Material(
+      color: selected
+          ? colorScheme.primaryContainer.withValues(alpha: 0.28)
+          : colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: borderColor),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                selected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+                color: selected ? colorScheme.primary : colorScheme.outline,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      description,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class PlanDisclaimerCard extends StatelessWidget {
+  const PlanDisclaimerCard({
+    super.key,
+    required this.accepted,
+    required this.onChanged,
+  });
+
+  final bool accepted;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return InputCard(
+      title: 'Qima AI Nutrition Disclaimer',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Qima provides AI-generated nutrition guidance for informational purposes only. It may be inaccurate or incomplete and should not replace professional medical, dietary, or allergy advice.',
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: () => _showAgreement(context),
+              child: const Text('Read full agreement'),
+            ),
+          ),
+          CheckboxListTile(
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'I have read and agree to the Qima AI Nutrition Disclaimer & User Agreement.',
+            ),
+            value: accepted,
+            onChanged: (value) => onChanged(value ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAgreement(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Qima AI Nutrition Disclaimer & User Agreement'),
+          content: const SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(child: Text(qimaAgreementText)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class ProfileFormSection extends StatelessWidget {
+  const ProfileFormSection({
+    super.key,
+    required this.title,
+    required this.child,
+  });
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class SafetyScreeningSection extends StatelessWidget {
+  const SafetyScreeningSection({
+    super.key,
+    required this.values,
+    required this.onChanged,
+  });
+
+  final Map<String, bool> values;
+  final void Function(String key, bool value) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasRestriction = safetyScreeningHasRestriction(values);
+    return ProfileFormSection(
+      title: 'Safety Screening',
+      child: Column(
+        children: [
+          _screeningTile('pregnant', 'I am pregnant'),
+          _screeningTile('breastfeeding', 'I am breastfeeding'),
+          _screeningTile(
+            'eating_disorder_history',
+            'I have or had an eating disorder',
+          ),
+          _screeningTile('under_18', 'I am under 18'),
+          _screeningTile(
+            'medical_condition_affects_diet',
+            'I have a medical condition that affects my diet',
+          ),
+          _screeningTile(
+            'abnormal_labs_or_health_concerns',
+            'I have abnormal lab results or health concerns',
+          ),
+          const Divider(),
+          _screeningTile(
+            'none_of_above',
+            'None of the above apply to me',
+          ),
+          if (hasRestriction)
+            const NoticeCard(
+              icon: Icons.info_outline,
+              title: 'Personalized planning may be limited',
+              message: safetyRestrictionMessage,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _screeningTile(String key, String title) {
+    return CheckboxListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(title),
+      value: values[key] ?? false,
+      onChanged: (value) => onChanged(key, value ?? false),
+      controlAffinity: ListTileControlAffinity.leading,
+    );
+  }
+}
+
+class AgreementSection extends StatelessWidget {
+  const AgreementSection({
+    super.key,
+    required this.accepted,
+    required this.onChanged,
+  });
+
+  final bool accepted;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return ProfileFormSection(
+      title: 'Qima AI Nutrition Disclaimer & User Agreement',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            height: 180,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const SingleChildScrollView(
+              child: Text(qimaAgreementText),
+            ),
+          ),
+          const SizedBox(height: 8),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'I have read and agree to the Qima AI Nutrition Disclaimer & User Agreement.',
+            ),
+            value: accepted,
+            onChanged: onChanged == null
+                ? null
+                : (value) => onChanged!(value ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class SourceMetadata extends StatelessWidget {
   const SourceMetadata({super.key, required this.raw});
 
@@ -3240,6 +4024,93 @@ double? number(Object? value) {
     return double.tryParse(value);
   }
   return null;
+}
+
+Map<String, bool> defaultSafetyScreening() {
+  return {
+    'pregnant': false,
+    'breastfeeding': false,
+    'eating_disorder_history': false,
+    'under_18': false,
+    'medical_condition_affects_diet': false,
+    'abnormal_labs_or_health_concerns': false,
+    'none_of_above': false,
+  };
+}
+
+const _safetyRestrictionKeys = [
+  'pregnant',
+  'breastfeeding',
+  'eating_disorder_history',
+  'under_18',
+  'medical_condition_affects_diet',
+  'abnormal_labs_or_health_concerns',
+];
+
+bool safetyScreeningHasRestriction(Map<String, bool> values) {
+  return _safetyRestrictionKeys.any((key) => values[key] == true);
+}
+
+bool safetyScreeningCompleted(Map<String, bool> values) {
+  return values['none_of_above'] == true || safetyScreeningHasRestriction(values);
+}
+
+void updateSafetyScreening(Map<String, bool> values, String key, bool value) {
+  values[key] = value;
+  if (key == 'none_of_above' && value) {
+    for (final restrictionKey in _safetyRestrictionKeys) {
+      values[restrictionKey] = false;
+    }
+    return;
+  }
+  if (key != 'none_of_above' && value) {
+    values['none_of_above'] = false;
+  }
+}
+
+Map<String, Object?> safetyScreeningBody(Map<String, bool> values) {
+  return {
+    for (final entry in values.entries) entry.key: entry.value,
+  };
+}
+
+void applySafetyScreeningFromProfile(Map<String, bool> values, Object? raw) {
+  values
+    ..clear()
+    ..addAll(defaultSafetyScreening());
+  if (raw is! Map) {
+    return;
+  }
+  for (final key in values.keys.toList()) {
+    values[key] = raw[key] == true;
+  }
+}
+
+String inputNumberText(Object? value) {
+  final parsed = number(value);
+  if (parsed == null) {
+    return '';
+  }
+  final raw = parsed.toString();
+  return raw.endsWith('.0') ? parsed.toInt().toString() : raw;
+}
+
+String commaSeparatedText(Object? value) {
+  if (value is! List) {
+    return '';
+  }
+  return value.map((item) => text(item, fallback: '').trim()).where((item) {
+    return item.isNotEmpty;
+  }).join(', ');
+}
+
+String optionFromProfile(
+  Object? value,
+  List<String> options, {
+  required String fallback,
+}) {
+  final normalized = text(value, fallback: '').trim();
+  return options.contains(normalized) ? normalized : fallback;
 }
 
 Map<String, Object?> priceBudgetContext({

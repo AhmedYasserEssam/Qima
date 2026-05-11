@@ -417,10 +417,35 @@ def init_db() -> None:
                     nutrition_goal TEXT NOT NULL,
                     allergens JSONB NOT NULL DEFAULT '[]'::jsonb,
                     dietary_restrictions JSONB NOT NULL DEFAULT '[]'::jsonb,
-                    budget_limit_egp DOUBLE PRECISION NULL,
+                    safety_screening JSONB NOT NULL DEFAULT '{"pregnant": false, "breastfeeding": false, "eating_disorder_history": false, "under_18": false, "medical_condition_affects_diet": false, "abnormal_labs_or_health_concerns": false, "none_of_above": true}'::jsonb,
+                    agreement_accepted BOOLEAN NOT NULL DEFAULT FALSE,
                     created_at TIMESTAMP NOT NULL,
                     updated_at TIMESTAMP NOT NULL
                 );
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE nutrition_profiles
+                DROP COLUMN IF EXISTS budget_limit_egp;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE nutrition_profiles
+                ADD COLUMN IF NOT EXISTS safety_screening JSONB NOT NULL DEFAULT '{"pregnant": false, "breastfeeding": false, "eating_disorder_history": false, "under_18": false, "medical_condition_affects_diet": false, "abnormal_labs_or_health_concerns": false, "none_of_above": true}'::jsonb;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE nutrition_profiles
+                ADD COLUMN IF NOT EXISTS agreement_accepted BOOLEAN NOT NULL DEFAULT FALSE;
                 """
             )
         )
