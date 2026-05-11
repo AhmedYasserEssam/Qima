@@ -293,7 +293,16 @@ def _build_prompt(locale: str | None) -> str:
         "candidates with confidence scores from 0 to 1. Include at least one dish "
         "candidate; if no food is visible, use the name 'unknown food item' with low "
         "confidence and add a warning. Do not estimate nutrients, prices, medical "
-        "advice, or recipe instructions."
+        "advice, or recipe instructions. Prioritize Egyptian dishes and foods "
+        "commonly available in Egypt when the image evidence supports them. When "
+        "a food could be either an Egyptian/local Egyptian dish or a similar "
+        "international dish, rank the Egyptian/common-in-Egypt name first; for "
+        "example, prefer 'macaroni bechamel' over 'pastitsio' when both fit the "
+        "image. Use the simplest accurate food name when the image evidence is "
+        "simple. Do not add preparation, coating, seasoning, or flavor adjectives "
+        "unless they are clearly visible; for example, use 'walnuts' instead of "
+        "'glazed walnuts' and 'cashews' instead of 'seasoned cashews' when those "
+        "extra details are not visually supported."
     )
     if locale:
         prompt += f" User locale: {locale}."

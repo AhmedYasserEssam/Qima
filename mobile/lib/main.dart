@@ -1293,6 +1293,9 @@ final chatControllerProvider =
       (ref) => EndpointController(ref.read(apiClientProvider)),
     );
 
+const noReliableVisionNutritionInputMessage =
+    'No reliable nutrition input was found from this image.';
+
 class ScanScreen extends ConsumerStatefulWidget {
   const ScanScreen({super.key});
 
@@ -1305,6 +1308,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   final dishController = TextEditingController(text: 'koshari');
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _scanResultKey = GlobalKey();
+  Map<String, Object?>? _lastNutritionRequestBody;
 
   @override
   void initState() {
@@ -1417,12 +1421,13 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
             title: 'Scan result',
             value: scanState,
             onRetry: _lookupBarcode,
+            onEstimateNutritionFromVision: _estimateNutritionFromVision,
           ),
         ),
         AsyncPayloadView(
           title: 'Nutrition estimate',
           value: nutritionState,
-          onRetry: _estimateNutrition,
+          onRetry: _retryNutritionEstimate,
         ),
       ],
     );
@@ -1472,12 +1477,45 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
       showValidation(context, 'Recognized dish is required.');
       return;
     }
+    _submitNutritionEstimate(<String, Object?>{
+      'input_type': 'recognized_dish',
+      'recognized_dish': dish,
+    });
+  }
+
+  void _retryNutritionEstimate() {
+    final body = _lastNutritionRequestBody;
+    if (body == null) {
+      _estimateNutrition();
+      return;
+    }
+    _submitNutritionEstimate(body);
+  }
+
+  void _estimateNutritionFromVision(Map<String, Object?> raw) {
+    final body = nutritionRequestBodyFromVisionPayload(raw);
+    if (body == null) {
+      showValidation(context, noReliableVisionNutritionInputMessage);
+      return;
+    }
+
+    if (body['input_type'] == 'recognized_dish') {
+      final dish = text(body['recognized_dish'], fallback: '').trim();
+      if (dish.isNotEmpty) {
+        dishController.text = dish;
+      }
+    }
+    _submitNutritionEstimate(body);
+  }
+
+  void _submitNutritionEstimate(Map<String, Object?> body) {
+    _lastNutritionRequestBody = Map<String, Object?>.from(body);
     ref
         .read(nutritionControllerProvider.notifier)
         .run(
           (client) => client.post(
             '/v1/nutrition/estimate',
-            {'input_type': 'recognized_dish', 'recognized_dish': dish},
+            body,
             requiredFields: [
               'matched_dish',
               'nutrients',
@@ -2805,11 +2843,13 @@ class AsyncPayloadView extends ConsumerWidget {
     required this.title,
     required this.value,
     required this.onRetry,
+    this.onEstimateNutritionFromVision,
   });
 
   final String title;
   final AsyncValue<ApiPayload>? value;
   final VoidCallback onRetry;
+  final ValueChanged<Map<String, Object?>>? onEstimateNutritionFromVision;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -2818,7 +2858,11 @@ class AsyncPayloadView extends ConsumerWidget {
       return EmptyState(title: title);
     }
     return current.when(
-      data: (payload) => PayloadCard(title: title, payload: payload),
+      data: (payload) => PayloadCard(
+        title: title,
+        payload: payload,
+        onEstimateNutritionFromVision: onEstimateNutritionFromVision,
+      ),
       error: (error, stackTrace) {
         final failure = error is ApiFailure
             ? error
@@ -2844,7 +2888,7 @@ class LoadingState extends StatelessWidget {
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
         title: Text(title),
-        subtitle: const Text('Calling FastAPI stub...'),
+        subtitle: const Text('Calling FastAPI...'),
       ),
     );
   }
@@ -2913,10 +2957,16 @@ class ErrorState extends StatelessWidget {
 }
 
 class PayloadCard extends ConsumerWidget {
-  const PayloadCard({super.key, required this.title, required this.payload});
+  const PayloadCard({
+    super.key,
+    required this.title,
+    required this.payload,
+    this.onEstimateNutritionFromVision,
+  });
 
   final String title;
   final ApiPayload payload;
+  final ValueChanged<Map<String, Object?>>? onEstimateNutritionFromVision;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -2924,6 +2974,8 @@ class PayloadCard extends ConsumerWidget {
     final raw = payload.raw;
     final summary = summarizePayload(raw);
     final isBarcodeScan = isBarcodeScanPayload(raw);
+    final isVisionIdentify = isVisionIdentifyPayload(raw);
+    final isNutritionEstimate = isNutritionEstimatePayload(raw);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -2946,6 +2998,13 @@ class PayloadCard extends ConsumerWidget {
               ),
             if (isBarcodeScan)
               BarcodeScanResultView(raw: raw)
+            else if (isVisionIdentify)
+              VisionIdentifyResultView(
+                raw: raw,
+                onEstimateNutrition: onEstimateNutritionFromVision,
+              )
+            else if (isNutritionEstimate)
+              NutritionEstimateResultView(raw: raw)
             else
               for (final item in summary.entries)
                 Padding(
@@ -3114,6 +3173,228 @@ class BarcodeScanResultView extends StatelessWidget {
             ],
           ),
         ),
+      ],
+    );
+  }
+}
+
+class VisionIdentifyResultView extends StatelessWidget {
+  const VisionIdentifyResultView({
+    super.key,
+    required this.raw,
+    this.onEstimateNutrition,
+  });
+
+  final Map<String, Object?> raw;
+  final ValueChanged<Map<String, Object?>>? onEstimateNutrition;
+
+  @override
+  Widget build(BuildContext context) {
+    final dishCandidates = visionCandidates(raw['dish_candidates']);
+    final ingredientCandidates = visionCandidates(raw['ingredients']);
+    final topCandidate = dishCandidates.isEmpty ? null : dishCandidates.first;
+    final confidence = number(raw['confidence']);
+    final warnings = textList(raw['warnings']);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          topCandidate?.name ?? 'Unknown food item',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        if (confidence != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            'Overall confidence: ${formatConfidence(confidence)}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+        const SectionHeader(title: 'Dish candidates'),
+        const SizedBox(height: 6),
+        if (dishCandidates.isEmpty)
+          Text(
+            'No reliable dish candidates returned.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          )
+        else
+          Column(
+            children: [
+              for (final candidate in dishCandidates)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          candidate.name,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                      if (candidate.confidence != null) ...[
+                        const SizedBox(width: 12),
+                        Text(
+                          formatConfidence(candidate.confidence!),
+                          textAlign: TextAlign.right,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        const SizedBox(height: 12),
+        const SectionHeader(title: 'Ingredients'),
+        const SizedBox(height: 6),
+        if (ingredientCandidates.isEmpty)
+          Text(
+            'No reliable ingredient candidates returned.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          )
+        else
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final candidate in ingredientCandidates)
+                Chip(
+                  label: Text(visionCandidateChipLabel(candidate)),
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
+          ),
+        if (onEstimateNutrition != null) ...[
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: () => onEstimateNutrition!(raw),
+            icon: const Icon(Icons.calculate_outlined),
+            label: const Text('Estimate nutrition'),
+          ),
+        ],
+        if (warnings.isNotEmpty)
+          NoticeCard(
+            icon: Icons.warning_amber_outlined,
+            title: 'Warnings',
+            message: warnings.join('\n'),
+          ),
+      ],
+    );
+  }
+}
+
+class NutritionEstimateResultView extends StatelessWidget {
+  const NutritionEstimateResultView({super.key, required this.raw});
+
+  final Map<String, Object?> raw;
+
+  @override
+  Widget build(BuildContext context) {
+    final matchedDish = raw['matched_dish'];
+    final matchedName = matchedDish is Map
+        ? text(matchedDish['name'], fallback: 'Estimated nutrition').trim()
+        : 'Estimated nutrition';
+    final matchType = matchedDish is Map
+        ? text(matchedDish['match_type'], fallback: '').trim()
+        : '';
+    final servingAssumptions = raw['serving_assumptions'];
+    final servingBasis = servingAssumptions is Map
+        ? text(servingAssumptions['basis'], fallback: '').trim()
+        : '';
+    final servingNote = servingAssumptions is Map
+        ? text(servingAssumptions['note'], fallback: '').trim()
+        : '';
+    final nutrients = nutritionEstimateRows(raw['nutrients']);
+    final confidence = number(raw['confidence']);
+    final warnings = textList(raw['warnings']);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          matchedName.isEmpty ? 'Estimated nutrition' : matchedName,
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        if (matchType.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text(
+            'Match: ${matchType.replaceAll('_', ' ')}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+        if (confidence != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            'Estimate confidence: ${formatConfidence(confidence)}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+        const SectionHeader(title: 'Estimated nutrition'),
+        const SizedBox(height: 6),
+        if (nutrients.isEmpty)
+          Text('Unavailable', style: Theme.of(context).textTheme.bodyMedium)
+        else
+          Column(
+            children: [
+              for (final row in nutrients)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          row.label,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        row.value,
+                        textAlign: TextAlign.right,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        if (servingBasis.isNotEmpty || servingNote.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const SectionHeader(title: 'Serving assumption'),
+          const SizedBox(height: 6),
+          if (servingBasis.isNotEmpty)
+            Text(servingBasis, style: Theme.of(context).textTheme.bodyMedium),
+          if (servingNote.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              servingNote,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+        if (warnings.isNotEmpty)
+          NoticeCard(
+            icon: Icons.warning_amber_outlined,
+            title: 'Warnings',
+            message: warnings.join('\n'),
+          ),
       ],
     );
   }
@@ -3606,8 +3887,197 @@ class NutritionRow {
   final String value;
 }
 
+class VisionCandidate {
+  const VisionCandidate({required this.name, required this.confidence});
+
+  final String name;
+  final double? confidence;
+}
+
+const visionNutritionConfidenceCutoff = 0.70;
+const _unknownVisionDishNames = {
+  'unknown',
+  'unknown food',
+  'unknown food item',
+};
+
 bool isBarcodeScanPayload(Map<String, Object?> raw) {
   return raw['product_id'] != null && raw['nutrition'] is Map;
+}
+
+bool isVisionIdentifyPayload(Map<String, Object?> raw) {
+  final source = raw['source'];
+  return raw['image_id'] != null &&
+      raw['dish_candidates'] is List &&
+      raw['ingredients'] is List &&
+      source is Map &&
+      source['source_type'] == 'vision_model';
+}
+
+bool isNutritionEstimatePayload(Map<String, Object?> raw) {
+  return raw['matched_dish'] is Map &&
+      raw['nutrients'] is Map &&
+      raw['source'] is Map &&
+      number(raw['confidence']) != null;
+}
+
+Map<String, Object?>? nutritionRequestBodyFromVisionPayload(
+  Map<String, Object?> raw,
+) {
+  final ingredients = _distinctVisionCandidateNames(
+    visionCandidates(raw['ingredients']),
+  );
+  final dishCandidates = visionCandidates(raw['dish_candidates']);
+  if (dishCandidates.isNotEmpty) {
+    final topCandidate = dishCandidates.first;
+    final confidence = topCandidate.confidence;
+    final dishName = topCandidate.name.trim();
+    if (confidence != null &&
+        confidence >= visionNutritionConfidenceCutoff &&
+        dishName.isNotEmpty &&
+        !_isUnknownVisionDishName(dishName)) {
+      return <String, Object?>{
+        'input_type': 'recognized_dish',
+        'recognized_dish': dishName,
+        if (ingredients.isNotEmpty) 'ingredients': ingredients,
+      };
+    }
+  }
+
+  if (ingredients.isEmpty) {
+    return null;
+  }
+  return <String, Object?>{
+    'input_type': 'ingredient_set',
+    'ingredients': ingredients,
+  };
+}
+
+bool _isUnknownVisionDishName(String value) {
+  return _unknownVisionDishNames.contains(_normalizedVisionName(value));
+}
+
+String _normalizedVisionName(String value) {
+  return value.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+}
+
+List<String> _distinctVisionCandidateNames(List<VisionCandidate> candidates) {
+  final seen = <String>{};
+  final names = <String>[];
+  for (final candidate in candidates) {
+    final name = candidate.name.trim();
+    if (name.isEmpty) {
+      continue;
+    }
+    final key = _normalizedVisionName(name);
+    if (key.isEmpty || seen.contains(key)) {
+      continue;
+    }
+    seen.add(key);
+    names.add(name);
+  }
+  return names;
+}
+
+List<VisionCandidate> visionCandidates(Object? rawCandidates) {
+  if (rawCandidates is! List) {
+    return const [];
+  }
+
+  final candidates = <VisionCandidate>[];
+  for (final item in rawCandidates) {
+    if (item is Map) {
+      final name = text(
+        item['name'] ?? item['text'] ?? item['ingredient'],
+        fallback: '',
+      ).trim();
+      if (name.isEmpty) {
+        continue;
+      }
+      candidates.add(
+        VisionCandidate(name: name, confidence: number(item['confidence'])),
+      );
+      continue;
+    }
+
+    final name = text(item, fallback: '').trim();
+    if (name.isNotEmpty) {
+      candidates.add(VisionCandidate(name: name, confidence: null));
+    }
+  }
+  return candidates;
+}
+
+List<NutritionRow> nutritionEstimateRows(Object? rawNutrients) {
+  if (rawNutrients is! Map) {
+    return const [];
+  }
+
+  final rows = <NutritionRow>[];
+  void addValue(
+    List<String> keys,
+    String label, {
+    required String unit,
+    required int decimals,
+  }) {
+    double? value;
+    for (final key in keys) {
+      value = number(rawNutrients[key]);
+      if (value != null) {
+        break;
+      }
+    }
+    if (value == null) {
+      return;
+    }
+    rows.add(
+      NutritionRow(
+        label: label,
+        value: '${formatNutritionNumber(value, decimals: decimals)} $unit',
+      ),
+    );
+  }
+
+  addValue(
+    ['calories_kcal', 'energy_kcal'],
+    'Calories',
+    unit: 'kcal',
+    decimals: 0,
+  );
+  addValue(['protein_g'], 'Protein', unit: 'g', decimals: 1);
+  addValue(['carbohydrates_g', 'carbs_g'], 'Carbs', unit: 'g', decimals: 1);
+  addValue(['fat_g'], 'Fat', unit: 'g', decimals: 1);
+  addValue(['fiber_g'], 'Fiber', unit: 'g', decimals: 1);
+  addValue(['sugar_g', 'sugars_g'], 'Sugar', unit: 'g', decimals: 1);
+  addValue(['sodium_mg'], 'Sodium', unit: 'mg', decimals: 0);
+  return rows;
+}
+
+String visionCandidateChipLabel(VisionCandidate candidate) {
+  final confidence = candidate.confidence;
+  if (confidence == null) {
+    return candidate.name;
+  }
+  return '${candidate.name} ${formatConfidence(confidence)}';
+}
+
+String formatConfidence(double confidence) {
+  return '${(confidence * 100).toStringAsFixed(0)}%';
+}
+
+List<String> textList(Object? rawValues) {
+  if (rawValues is! List) {
+    return const [];
+  }
+
+  final values = <String>[];
+  for (final item in rawValues) {
+    final value = text(item, fallback: '').trim();
+    if (value.isNotEmpty) {
+      values.add(value);
+    }
+  }
+  return values;
 }
 
 String nutritionBasisDisplayLabel(Object? rawNutrition) {

@@ -74,6 +74,12 @@ def test_gemini_client_sends_inline_image_and_parses_structured_output() -> None
         "mime_type": "image/jpeg",
         "data": base64.b64encode(b"fake-image").decode("ascii"),
     }
+    prompt = captured["payload"]["contents"][0]["parts"][1]["text"]
+    assert "Prioritize Egyptian dishes" in prompt
+    assert "prefer 'macaroni bechamel' over 'pastitsio'" in prompt
+    assert "Use the simplest accurate food name" in prompt
+    assert "use 'walnuts' instead of 'glazed walnuts'" in prompt
+    assert "cashews' instead of 'seasoned cashews'" in prompt
     generation_config = captured["payload"]["generationConfig"]
     assert generation_config["responseMimeType"] == "application/json"
     assert generation_config["responseJsonSchema"]["required"] == [
