@@ -72,7 +72,38 @@ def test_v1_post_endpoints_return_mock_responses() -> None:
         assert response.json()
 
 
-def test_vision_identify_returns_mock_response() -> None:
+def test_vision_identify_returns_structured_response(monkeypatch) -> None:
+    async def fake_identify_uploaded_food_image(
+        *,
+        image_bytes: bytes,
+        filename: str | None,
+        content_type: str | None,
+        locale: str | None,
+    ) -> dict:
+        assert image_bytes == b"mock-image"
+        assert filename == "food.jpg"
+        assert content_type == "image/jpeg"
+        assert locale == "en"
+        return {
+            "image_id": "img_test_001",
+            "dish_candidates": [{"name": "koshari", "confidence": 0.88}],
+            "ingredients": [{"name": "rice", "confidence": 0.92}],
+            "confidence": 0.86,
+            "source": {
+                "provider": "gemini",
+                "model": "gemini_2_5_flash",
+                "source_type": "vision_model",
+            },
+            "data_quality": {"completeness": "complete"},
+            "warnings": [],
+            "latency_ms": 12,
+        }
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.vision.identify_uploaded_food_image",
+        fake_identify_uploaded_food_image,
+    )
+
     response = client.post(
         "/v1/vision/identify",
         files={"image": ("food.jpg", b"mock-image", "image/jpeg")},
@@ -80,7 +111,10 @@ def test_vision_identify_returns_mock_response() -> None:
     )
 
     assert response.status_code == 200
-    assert response.json()["image_id"] == "img_stub_001"
+    body = response.json()
+    assert body["image_id"] == "img_test_001"
+    assert body["dish_candidates"][0]["name"] == "koshari"
+    assert body["source"]["provider"] == "gemini"
 
 
 def test_v1_get_endpoints_return_mock_responses() -> None:

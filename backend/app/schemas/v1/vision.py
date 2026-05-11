@@ -26,8 +26,8 @@ class IngredientCandidate(BaseModel):
 class VisionSource(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    provider: Literal["google_gemini"]
-    model: Literal["gemini-2.5-flash"]
+    provider: Literal["gemini"]
+    model: Literal["gemini_2_5_flash"]
     source_type: Literal["vision_model"]
 
 
@@ -41,7 +41,7 @@ class VisionIdentifyResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     image_id: str = Field(..., min_length=1)
-    dish_candidates: list[DishCandidate] = Field(default_factory=list)
+    dish_candidates: list[DishCandidate] = Field(..., min_length=1)
     ingredients: list[IngredientCandidate] = Field(default_factory=list)
     confidence: float = Field(..., ge=0, le=1)
     source: VisionSource
