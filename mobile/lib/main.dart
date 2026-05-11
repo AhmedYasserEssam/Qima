@@ -2844,7 +2844,7 @@ class LoadingState extends StatelessWidget {
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
         title: Text(title),
-        subtitle: const Text('Calling FastAPI stub...'),
+        subtitle: const Text('Calling FastAPI...'),
       ),
     );
   }
@@ -2924,6 +2924,7 @@ class PayloadCard extends ConsumerWidget {
     final raw = payload.raw;
     final summary = summarizePayload(raw);
     final isBarcodeScan = isBarcodeScanPayload(raw);
+    final isVisionIdentify = isVisionIdentifyPayload(raw);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -2946,6 +2947,8 @@ class PayloadCard extends ConsumerWidget {
               ),
             if (isBarcodeScan)
               BarcodeScanResultView(raw: raw)
+            else if (isVisionIdentify)
+              VisionIdentifyResultView(raw: raw)
             else
               for (final item in summary.entries)
                 Padding(
@@ -3114,6 +3117,104 @@ class BarcodeScanResultView extends StatelessWidget {
             ],
           ),
         ),
+      ],
+    );
+  }
+}
+
+class VisionIdentifyResultView extends StatelessWidget {
+  const VisionIdentifyResultView({super.key, required this.raw});
+
+  final Map<String, Object?> raw;
+
+  @override
+  Widget build(BuildContext context) {
+    final dishCandidates = visionCandidates(raw['dish_candidates']);
+    final ingredientCandidates = visionCandidates(raw['ingredients']);
+    final topCandidate = dishCandidates.isEmpty ? null : dishCandidates.first;
+    final confidence = number(raw['confidence']);
+    final warnings = textList(raw['warnings']);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          topCandidate?.name ?? 'Unknown food item',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        if (confidence != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            'Overall confidence: ${formatConfidence(confidence)}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+        const SectionHeader(title: 'Dish candidates'),
+        const SizedBox(height: 6),
+        if (dishCandidates.isEmpty)
+          Text(
+            'No reliable dish candidates returned.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          )
+        else
+          Column(
+            children: [
+              for (final candidate in dishCandidates)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          candidate.name,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                      if (candidate.confidence != null) ...[
+                        const SizedBox(width: 12),
+                        Text(
+                          formatConfidence(candidate.confidence!),
+                          textAlign: TextAlign.right,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        const SizedBox(height: 12),
+        const SectionHeader(title: 'Ingredients'),
+        const SizedBox(height: 6),
+        if (ingredientCandidates.isEmpty)
+          Text(
+            'No reliable ingredient candidates returned.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          )
+        else
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final candidate in ingredientCandidates)
+                Chip(
+                  label: Text(visionCandidateChipLabel(candidate)),
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
+          ),
+        if (warnings.isNotEmpty)
+          NoticeCard(
+            icon: Icons.warning_amber_outlined,
+            title: 'Warnings',
+            message: warnings.join('\n'),
+          ),
       ],
     );
   }
@@ -3606,8 +3707,80 @@ class NutritionRow {
   final String value;
 }
 
+class VisionCandidate {
+  const VisionCandidate({required this.name, required this.confidence});
+
+  final String name;
+  final double? confidence;
+}
+
 bool isBarcodeScanPayload(Map<String, Object?> raw) {
   return raw['product_id'] != null && raw['nutrition'] is Map;
+}
+
+bool isVisionIdentifyPayload(Map<String, Object?> raw) {
+  final source = raw['source'];
+  return raw['image_id'] != null &&
+      raw['dish_candidates'] is List &&
+      raw['ingredients'] is List &&
+      source is Map &&
+      source['source_type'] == 'vision_model';
+}
+
+List<VisionCandidate> visionCandidates(Object? rawCandidates) {
+  if (rawCandidates is! List) {
+    return const [];
+  }
+
+  final candidates = <VisionCandidate>[];
+  for (final item in rawCandidates) {
+    if (item is Map) {
+      final name = text(
+        item['name'] ?? item['text'] ?? item['ingredient'],
+        fallback: '',
+      ).trim();
+      if (name.isEmpty) {
+        continue;
+      }
+      candidates.add(
+        VisionCandidate(name: name, confidence: number(item['confidence'])),
+      );
+      continue;
+    }
+
+    final name = text(item, fallback: '').trim();
+    if (name.isNotEmpty) {
+      candidates.add(VisionCandidate(name: name, confidence: null));
+    }
+  }
+  return candidates;
+}
+
+String visionCandidateChipLabel(VisionCandidate candidate) {
+  final confidence = candidate.confidence;
+  if (confidence == null) {
+    return candidate.name;
+  }
+  return '${candidate.name} ${formatConfidence(confidence)}';
+}
+
+String formatConfidence(double confidence) {
+  return '${(confidence * 100).toStringAsFixed(0)}%';
+}
+
+List<String> textList(Object? rawValues) {
+  if (rawValues is! List) {
+    return const [];
+  }
+
+  final values = <String>[];
+  for (final item in rawValues) {
+    final value = text(item, fallback: '').trim();
+    if (value.isNotEmpty) {
+      values.add(value);
+    }
+  }
+  return values;
 }
 
 String nutritionBasisDisplayLabel(Object? rawNutrition) {
