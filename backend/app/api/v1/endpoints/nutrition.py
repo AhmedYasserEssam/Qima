@@ -1,50 +1,44 @@
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
+from app.api.v1.error_responses import build_error_response
+from app.schemas.v1.error import ErrorCode, ErrorResponse
 from app.schemas.v1.nutrition import (
-    DataQuality,
-    MatchedDish,
-    Nutrients,
     NutritionEstimateRequest,
     NutritionEstimateSuccess,
-    ServingAssumptions,
-    Source,
 )
+from app.services.exceptions import NotFoundError, UpstreamUnavailableError
+from app.services.nutrition_service import estimate_nutrition as estimate_nutrition_with_data
 
 router = APIRouter()
 
 
-@router.post("/estimate", response_model=NutritionEstimateSuccess)
+@router.post(
+    "/estimate",
+    response_model=NutritionEstimateSuccess,
+    responses={
+        404: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+)
 async def estimate_nutrition(
     payload: NutritionEstimateRequest,
-) -> NutritionEstimateSuccess:
-    if payload.recognized_dish:
-        matched_name = payload.recognized_dish
-        match_type = "dish"
-    else:
-        matched_name = ", ".join(payload.ingredients or ["mixed ingredients"])
-        match_type = "ingredient_set"
-
-    return NutritionEstimateSuccess(
-        matched_dish=MatchedDish(
-            name=matched_name,
-            match_type=match_type,
-            match_id="nutrition_stub_001",
-        ),
-        serving_assumptions=ServingAssumptions(
-            basis=payload.serving_hint or "one typical serving",
-            note="Mock serving assumption for API integration testing.",
-        ),
-        nutrients=Nutrients(
-            calories_kcal=520,
-            protein_g=24,
-            carbohydrates_g=68,
-            fat_g=16,
-            fiber_g=9,
-            sugar_g=6,
-            sodium_mg=430,
-        ),
-        confidence=0.7,
-        source=Source(dataset="egyptian_food_csv", source_type="egyptian_food_dataset"),
-        data_quality=DataQuality(completeness="partial"),
-        warnings=["Mock response. Nutrition values are estimates."],
-    )
+) -> NutritionEstimateSuccess | JSONResponse:
+    try:
+        return estimate_nutrition_with_data(payload)
+    except NotFoundError:
+        return build_error_response(
+            status_code=404,
+            code=ErrorCode.NOT_FOUND,
+            message="No matching dish or ingredient data found for the supplied estimate input.",
+            retryable=False,
+            details={},
+        )
+    except UpstreamUnavailableError:
+        return build_error_response(
+            status_code=503,
+            code=ErrorCode.UPSTREAM_UNAVAILABLE,
+            message="Nutrition estimation source is currently unavailable.",
+            retryable=True,
+            details={},
+        )

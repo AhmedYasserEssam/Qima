@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services.exceptions import NotFoundError, UpstreamUnavailableError
 
 
 client = TestClient(app)
@@ -18,7 +19,7 @@ def test_v1_post_endpoints_return_mock_responses() -> None:
         (
             "post",
             "/v1/nutrition/estimate",
-            {"input_type": "recognized_dish", "recognized_dish": "koshari"},
+            {"input_type": "recognized_dish", "recognized_dish": "Eggplant, raw"},
         ),
         ("post", "/v1/recipes/suggest", {"pantry_items": ["rice", "lentils"]}),
         (
@@ -115,6 +116,60 @@ def test_vision_identify_returns_structured_response(monkeypatch) -> None:
     assert body["image_id"] == "img_test_001"
     assert body["dish_candidates"][0]["name"] == "koshari"
     assert body["source"]["provider"] == "gemini"
+
+
+def test_nutrition_estimate_returns_real_xlsx_response() -> None:
+    response = client.post(
+        "/v1/nutrition/estimate",
+        json={"input_type": "recognized_dish", "recognized_dish": "Eggplant, raw"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["matched_dish"]["name"] == "Eggplant, raw"
+    assert body["source"] == {
+        "dataset": "nutrition_xlsx",
+        "source_type": "nutrition_dataset",
+    }
+    assert body["nutrients"]["calories_kcal"] == 25
+
+
+def test_nutrition_estimate_returns_404_for_no_match(monkeypatch) -> None:
+    def fake_estimate_nutrition_with_data(payload) -> None:
+        del payload
+        raise NotFoundError("not found")
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.nutrition.estimate_nutrition_with_data",
+        fake_estimate_nutrition_with_data,
+    )
+
+    response = client.post(
+        "/v1/nutrition/estimate",
+        json={"input_type": "recognized_dish", "recognized_dish": "missing food"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "NOT_FOUND"
+
+
+def test_nutrition_estimate_returns_503_for_unavailable_source(monkeypatch) -> None:
+    def fake_estimate_nutrition_with_data(payload) -> None:
+        del payload
+        raise UpstreamUnavailableError("unavailable")
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.nutrition.estimate_nutrition_with_data",
+        fake_estimate_nutrition_with_data,
+    )
+
+    response = client.post(
+        "/v1/nutrition/estimate",
+        json={"input_type": "recognized_dish", "recognized_dish": "eggplant"},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "UPSTREAM_UNAVAILABLE"
 
 
 def test_v1_get_endpoints_return_mock_responses() -> None:
