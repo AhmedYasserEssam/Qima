@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StrictBaseModel(BaseModel):
@@ -36,7 +36,6 @@ class NutritionGoal(StrEnum):
     REDUCE_SODIUM = "reduce_sodium"
     REDUCE_SATURATED_FAT = "reduce_saturated_fat"
     INCREASE_FIBER = "increase_fiber"
-    BUDGET_FRIENDLY = "budget_friendly"
 
 
 def _normalize_string_list(values: list[str] | None) -> list[str]:
@@ -53,6 +52,37 @@ def _normalize_string_list(values: list[str] | None) -> list[str]:
     return normalized
 
 
+class SafetyScreening(StrictBaseModel):
+    pregnant: bool = False
+    breastfeeding: bool = False
+    eating_disorder_history: bool = False
+    under_18: bool = False
+    medical_condition_affects_diet: bool = False
+    abnormal_labs_or_health_concerns: bool = False
+    none_of_above: bool = False
+
+    @property
+    def has_restriction(self) -> bool:
+        return any(
+            [
+                self.pregnant,
+                self.breastfeeding,
+                self.eating_disorder_history,
+                self.under_18,
+                self.medical_condition_affects_diet,
+                self.abnormal_labs_or_health_concerns,
+            ]
+        )
+
+    @model_validator(mode="after")
+    def validate_completion(self) -> "SafetyScreening":
+        if self.none_of_above and self.has_restriction:
+            raise ValueError("none_of_above cannot be selected with another safety option")
+        if not self.none_of_above and not self.has_restriction:
+            raise ValueError("Complete the safety screening before continuing")
+        return self
+
+
 class NutritionProfileCreateUpdate(StrictBaseModel):
     age: int = Field(..., ge=1, le=120)
     sex: Sex
@@ -62,7 +92,8 @@ class NutritionProfileCreateUpdate(StrictBaseModel):
     goal: NutritionGoal
     allergens: list[str] = Field(default_factory=list)
     dietary_restrictions: list[str] = Field(default_factory=list)
-    budget_limit_egp: float | None = Field(default=None, gt=0)
+    safety_screening: SafetyScreening
+    agreement_accepted: bool
 
     @field_validator("allergens", "dietary_restrictions", mode="before")
     @classmethod
@@ -72,6 +103,15 @@ class NutritionProfileCreateUpdate(StrictBaseModel):
         if not isinstance(value, list):
             raise ValueError("Expected a list of strings")
         return _normalize_string_list([str(v) for v in value])
+
+    @field_validator("agreement_accepted")
+    @classmethod
+    def require_agreement(cls, value: bool) -> bool:
+        if not value:
+            raise ValueError(
+                "You must read and agree to the Qima AI Nutrition Disclaimer & User Agreement before continuing."
+            )
+        return value
 
 
 class NutritionProfileResponse(StrictBaseModel):
@@ -84,5 +124,6 @@ class NutritionProfileResponse(StrictBaseModel):
     goal: NutritionGoal
     allergens: list[str]
     dietary_restrictions: list[str]
-    budget_limit_egp: float | None
+    safety_screening: SafetyScreening
+    agreement_accepted: bool
     updated_at: datetime

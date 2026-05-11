@@ -153,7 +153,16 @@ Invoke-RestMethod -Method POST -Uri "$base/v1/profile/update" -Headers $headers 
   goal = "reduce_sugar"
   allergens = @("Milk", "milk", "peanut")
   dietary_restrictions = @("halal", " low_sodium ")
-  budget_limit_egp = 2500
+  safety_screening = @{
+    pregnant = $false
+    breastfeeding = $false
+    eating_disorder_history = $false
+    under_18 = $false
+    medical_condition_affects_diet = $false
+    abnormal_labs_or_health_concerns = $false
+    none_of_above = $true
+  }
+  agreement_accepted = $true
 } | ConvertTo-Json)
 ```
 
@@ -177,9 +186,11 @@ If you call this endpoint before creating a profile, expect `404` with guidance 
 - Email must be valid.
 - Password length is enforced.
 - `age`, `height_cm`, `weight_kg` must be realistic positive values.
-- `budget_limit_egp` must be positive when provided.
 - `allergens` and `dietary_restrictions` are trimmed, lowercased, deduplicated.
 - `sex` allowed values: `male`, `female`.
+- Safety screening is required: either select at least one safety option or `none_of_above`.
+- `none_of_above` cannot be combined with any safety option.
+- The Qima AI Nutrition Disclaimer & User Agreement must be accepted before profile creation/update.
 
 ## Run Automated Tests
 
@@ -222,7 +233,16 @@ Examples below are for API contract illustration.
   "goal": "reduce_sugar",
   "allergens": ["Milk", "milk", "peanut"],
   "dietary_restrictions": ["halal", " low_sodium "],
-  "budget_limit_egp": 2500
+  "safety_screening": {
+    "pregnant": false,
+    "breastfeeding": false,
+    "eating_disorder_history": false,
+    "under_18": false,
+    "medical_condition_affects_diet": false,
+    "abnormal_labs_or_health_concerns": false,
+    "none_of_above": true
+  },
+  "agreement_accepted": true
 }
 ```
 

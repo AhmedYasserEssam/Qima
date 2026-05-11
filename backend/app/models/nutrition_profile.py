@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Double, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, Double, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -31,7 +31,8 @@ class NutritionProfile(Base):
         nullable=False,
         default=list,
     )
-    budget_limit_egp: Mapped[float | None] = mapped_column(Double, nullable=True)
+    safety_screening: Mapped[dict[str, bool]] = mapped_column(JSONB, nullable=False, default=dict)
+    agreement_accepted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 

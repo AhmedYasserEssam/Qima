@@ -21,6 +21,32 @@ def _naive_to_utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC)
 
 
+def _profile_response(*, user_id: int, profile: NutritionProfile) -> NutritionProfileResponse:
+    return NutritionProfileResponse(
+        user_id=user_id,
+        age=profile.age,
+        sex=profile.sex,
+        height_cm=profile.height_cm,
+        weight_kg=profile.weight_kg,
+        activity_level=profile.activity_level,
+        goal=profile.nutrition_goal,
+        allergens=profile.allergens or [],
+        dietary_restrictions=profile.dietary_restrictions or [],
+        safety_screening=profile.safety_screening
+        or {
+            "pregnant": False,
+            "breastfeeding": False,
+            "eating_disorder_history": False,
+            "under_18": False,
+            "medical_condition_affects_diet": False,
+            "abnormal_labs_or_health_concerns": False,
+            "none_of_above": True,
+        },
+        agreement_accepted=profile.agreement_accepted,
+        updated_at=_naive_to_utc(profile.updated_at),
+    )
+
+
 class ProfileService:
     def __init__(self) -> None:
         self._initialized = False
@@ -56,7 +82,8 @@ class ProfileService:
                     nutrition_goal=payload.goal.value,
                     allergens=payload.allergens,
                     dietary_restrictions=payload.dietary_restrictions,
-                    budget_limit_egp=payload.budget_limit_egp,
+                    safety_screening=payload.safety_screening.model_dump(),
+                    agreement_accepted=payload.agreement_accepted,
                     created_at=now,
                     updated_at=now,
                 )
@@ -71,23 +98,12 @@ class ProfileService:
                 profile.nutrition_goal = payload.goal.value
                 profile.allergens = payload.allergens
                 profile.dietary_restrictions = payload.dietary_restrictions
-                profile.budget_limit_egp = payload.budget_limit_egp
+                profile.safety_screening = payload.safety_screening.model_dump()
+                profile.agreement_accepted = payload.agreement_accepted
                 profile.updated_at = now
                 session.flush()
 
-            response = NutritionProfileResponse(
-                user_id=user.id,
-                age=profile.age,
-                sex=profile.sex,
-                height_cm=profile.height_cm,
-                weight_kg=profile.weight_kg,
-                activity_level=profile.activity_level,
-                goal=profile.nutrition_goal,
-                allergens=profile.allergens or [],
-                dietary_restrictions=profile.dietary_restrictions or [],
-                budget_limit_egp=profile.budget_limit_egp,
-                updated_at=_naive_to_utc(profile.updated_at),
-            )
+            response = _profile_response(user_id=user.id, profile=profile)
         return response
 
     def get_my_profile(self, *, user: User) -> NutritionProfileResponse:
@@ -102,19 +118,7 @@ class ProfileService:
                 "Profile not found. Complete onboarding by calling POST /v1/profile/update first."
             )
 
-        return NutritionProfileResponse(
-            user_id=user.id,
-            age=profile.age,
-            sex=profile.sex,
-            height_cm=profile.height_cm,
-            weight_kg=profile.weight_kg,
-            activity_level=profile.activity_level,
-            goal=profile.nutrition_goal,
-            allergens=profile.allergens or [],
-            dietary_restrictions=profile.dietary_restrictions or [],
-            budget_limit_egp=profile.budget_limit_egp,
-            updated_at=_naive_to_utc(profile.updated_at),
-        )
+        return _profile_response(user_id=user.id, profile=profile)
 
 
 profile_service = ProfileService()

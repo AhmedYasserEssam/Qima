@@ -106,7 +106,16 @@ def test_profile_endpoints_require_authentication() -> None:
             "goal": "improve_general_health",
             "allergens": [],
             "dietary_restrictions": [],
-            "budget_limit_egp": None,
+            "safety_screening": {
+                "pregnant": False,
+                "breastfeeding": False,
+                "eating_disorder_history": False,
+                "under_18": False,
+                "medical_condition_affects_diet": False,
+                "abnormal_labs_or_health_concerns": False,
+                "none_of_above": True,
+            },
+            "agreement_accepted": True,
         },
     )
     response_get = client.get("/v1/profile/me")
