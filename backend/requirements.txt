@@ -18,3 +18,5 @@ openpyxl>=3.1,<4.0
 # If you install any `scrapling[...]` extras, make sure you run `scrapling install`
 # to install browser dependencies.
 scrapling[fetchers]>=0.4.7,<0.5
+groq
+python-dotenv

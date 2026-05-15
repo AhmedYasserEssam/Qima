@@ -299,15 +299,25 @@ def _build_prompt(locale: str | None) -> str:
         "international dish, rank the Egyptian/common-in-Egypt name first; for "
         "example, prefer 'macaroni bechamel' over 'pastitsio' when both fit the "
         "image. Use the simplest accurate food name when the image evidence is "
-        "simple. Do not add preparation, coating, seasoning, or flavor adjectives "
-        "unless they are clearly visible; for example, use 'walnuts' instead of "
+        "simple. For ingredient candidates, prefer raw/base ingredients over "
+        "processed or assembled intermediate food forms when the raw ingredient is "
+        "reasonably inferable from the visible dish; for example, for a burger, "
+        "list 'ground beef' instead of 'burger patty', and for pizza, list 'flour' "
+        "instead of 'dough'. For pasta with sauce, list base ingredients such as "
+        "'wheat pasta', 'tomato', or 'cheese' where visually supported, instead of "
+        "only naming the assembled dish. For fried chicken, list 'chicken' instead "
+        "of 'fried chicken piece' as an ingredient candidate. Do not over-infer "
+        "hidden ingredients. Only include raw/base ingredients that are visually "
+        "supported or strongly implied by the identified dish. If an ingredient is "
+        "not visible and not strongly implied, omit it or assign low confidence. "
+        "Do not add preparation, coating, seasoning, or flavor adjectives unless "
+        "they are clearly visible; for example, use 'walnuts' instead of "
         "'glazed walnuts' and 'cashews' instead of 'seasoned cashews' when those "
         "extra details are not visually supported."
     )
     if locale:
         prompt += f" User locale: {locale}."
     return prompt
-
 
 def _extract_response_text(response_payload: dict[str, Any]) -> str:
     candidates = response_payload.get("candidates")

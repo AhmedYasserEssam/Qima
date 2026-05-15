@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:qima/main.dart';
+import 'package:mobile/main.dart';
 
 void main() {
   test('vision nutrition request uses a high-confidence dish candidate', () {
@@ -103,7 +103,8 @@ void main() {
     expect(find.text('Dish candidates'), findsOneWidget);
     expect(find.text('Lettuce leaf'), findsOneWidget);
     expect(find.text('Ingredients'), findsOneWidget);
-    expect(find.text('Iceberg lettuce 99%'), findsOneWidget);
+    expect(find.text('Iceberg lettuce'), findsWidgets);
+    expect(find.text('99%'), findsWidgets);
     expect(find.text('Warnings'), findsOneWidget);
     expect(find.text('Low light image'), findsOneWidget);
     expect(find.text('Estimate nutrition'), findsNothing);
@@ -258,6 +259,91 @@ void main() {
       find.text('Mock response. Nutrition values are estimates.'),
       findsOneWidget,
     );
+  });
+
+  test('inventory items are parsed from payload shape', () {
+    final items = inventoryItemsFromPayload({
+      'items': [
+        {
+          'id': 11,
+          'name': 'Rice',
+          'normalized_name': 'rice',
+          'source_method': 'manual',
+          'source_ref': null,
+          'source_product_id': null,
+        },
+        {
+          'id': 12,
+          'name': 'Chicken Breast',
+          'normalized_name': 'chicken breast',
+          'source_method': 'barcode',
+          'source_ref': '6224000000000',
+          'source_product_id': 'off:6224000000000',
+        },
+      ],
+    });
+
+    expect(items.length, 2);
+    expect(items.first.id, 11);
+    expect(items.first.name, 'Rice');
+    expect(items.last.sourceMethod, 'barcode');
+    expect(items.last.sourceRef, '6224000000000');
+  });
+
+  test('manual inventory add body uses items list', () {
+    final body = buildInventoryManualAddBody([
+      ' rice ',
+      'onion',
+      '',
+      '  ',
+    ]);
+    expect(body, {
+      'items': ['rice', 'onion'],
+    });
+  });
+
+  test('vision inventory add body includes recognized and selected lists', () {
+    final body = buildInventoryImageAddBody(
+      const InventoryImageSelection(
+        imageId: 'img_123',
+        recognizedIngredients: ['rice', 'lentils', 'onion'],
+        selectedIngredients: ['rice', 'onion'],
+      ),
+    );
+    expect(body['image_id'], 'img_123');
+    expect(body['recognized_ingredients'], ['rice', 'lentils', 'onion']);
+    expect(body['selected_ingredients'], ['rice', 'onion']);
+  });
+
+  test('barcode is extracted from barcode scan payload', () {
+    final barcodeFromOff = inventoryBarcodeFromScanPayload({
+      'product_id': 'off:5449000000996',
+      'source': {'provider_product_id': '5449000000996'},
+    });
+    final barcodeFromSource = inventoryBarcodeFromScanPayload({
+      'product_id': 'carrefour:abc',
+      'source': {'provider_product_id': '6224000000000'},
+    });
+    final missingBarcode = inventoryBarcodeFromScanPayload({
+      'product_id': 'carrefour:abc',
+      'source': {'provider_product_id': 'abc'},
+    });
+
+    expect(barcodeFromOff, '5449000000996');
+    expect(barcodeFromSource, '6224000000000');
+    expect(missingBarcode, isNull);
+  });
+
+  test('recipe suggest body includes inventory ids pantry and budget level', () {
+    final body = buildRecipeSuggestRequestBody(
+      budgetLevel: 'mid',
+      inventoryItemIds: [7, 7, 3],
+      pantryItems: [' rice ', 'lentils', 'Rice'],
+    );
+
+    expect(body['budget_level'], 'mid');
+    expect(body['inventory_item_ids'], [7, 3]);
+    expect(body['pantry_items'], ['rice', 'lentils']);
   });
 }
 

@@ -13,7 +13,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.db import SessionLocal, init_db
+from app.db import SessionLocal, init_db  # noqa: E402
 
 
 REPO_ROOT = BACKEND_ROOT.parent
@@ -39,6 +39,9 @@ def seed(csv_path: Path, *, truncate: bool = False, batch_size: int = 500) -> in
                     "brand": row.get("brand") or None,
                     "nutrition_basis": row.get("nutrition_basis") or None,
                     "serving_size": row.get("serving_size") or None,
+                    "package_size_quantity": row.get("package_size_quantity") or None,
+                    "package_size_unit": row.get("package_size_unit") or None,
+                    "package_size_raw": row.get("package_size_raw") or None,
                     "energy_kcal": row.get("energy_kcal") or None,
                     "protein_g": row.get("protein_g") or None,
                     "carbohydrates_g": row.get("carbohydrates_g") or None,
@@ -84,6 +87,9 @@ def _flush_batch(rows: list[dict[str, Any]], *, truncate: bool) -> int:
                     brand,
                     nutrition_basis,
                     serving_size,
+                    package_size_quantity,
+                    package_size_unit,
+                    package_size_raw,
                     energy_kcal,
                     protein_g,
                     carbohydrates_g,
@@ -111,6 +117,9 @@ def _flush_batch(rows: list[dict[str, Any]], *, truncate: bool) -> int:
                     :brand,
                     :nutrition_basis,
                     :serving_size,
+                    :package_size_quantity,
+                    :package_size_unit,
+                    :package_size_raw,
                     :energy_kcal,
                     :protein_g,
                     :carbohydrates_g,
@@ -138,6 +147,9 @@ def _flush_batch(rows: list[dict[str, Any]], *, truncate: bool) -> int:
                     brand = EXCLUDED.brand,
                     nutrition_basis = EXCLUDED.nutrition_basis,
                     serving_size = EXCLUDED.serving_size,
+                    package_size_quantity = EXCLUDED.package_size_quantity,
+                    package_size_unit = EXCLUDED.package_size_unit,
+                    package_size_raw = EXCLUDED.package_size_raw,
                     energy_kcal = EXCLUDED.energy_kcal,
                     protein_g = EXCLUDED.protein_g,
                     carbohydrates_g = EXCLUDED.carbohydrates_g,

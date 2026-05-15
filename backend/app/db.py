@@ -86,6 +86,9 @@ def init_db() -> None:
                     brand TEXT,
                     nutrition_basis TEXT,
                     serving_size TEXT,
+                    package_size_quantity DOUBLE PRECISION,
+                    package_size_unit TEXT,
+                    package_size_raw TEXT,
                     energy_kcal DOUBLE PRECISION,
                     protein_g DOUBLE PRECISION,
                     carbohydrates_g DOUBLE PRECISION,
@@ -341,6 +344,39 @@ def init_db() -> None:
         conn.execute(
             text(
                 """
+                CREATE TABLE IF NOT EXISTS inventory_items (
+                    id BIGSERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL,
+                    normalized_name TEXT NOT NULL,
+                    source_method TEXT NOT NULL,
+                    source_ref TEXT,
+                    source_product_id TEXT,
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL
+                );
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_inventory_items_user_id
+                ON inventory_items(user_id);
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_inventory_items_user_normalized_name
+                ON inventory_items(user_id, normalized_name);
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
                 ALTER TABLE users
                 ADD COLUMN IF NOT EXISTS name TEXT;
                 """
@@ -422,6 +458,16 @@ def init_db() -> None:
                     created_at TIMESTAMP NOT NULL,
                     updated_at TIMESTAMP NOT NULL
                 );
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE carrefour_barcode_products
+                ADD COLUMN IF NOT EXISTS package_size_quantity DOUBLE PRECISION,
+                ADD COLUMN IF NOT EXISTS package_size_unit TEXT,
+                ADD COLUMN IF NOT EXISTS package_size_raw TEXT;
                 """
             )
         )
