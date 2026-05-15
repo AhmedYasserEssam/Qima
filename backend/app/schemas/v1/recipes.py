@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -8,15 +8,24 @@ class RecipeSuggestRequest(BaseModel):
 
     pantry_items: list[str] | None = None
     recognized_ingredients: list[str] | None = None
+    inventory_item_ids: list[Annotated[int, Field(ge=1)]] | None = Field(
+        default=None,
+        min_length=1,
+    )
+    budget_level: Literal["low", "mid", "high"] | None = None
     dietary_filters: list[str] = Field(default_factory=list)
     excluded_ingredients: list[str] = Field(default_factory=list)
     max_results: int | None = Field(default=None, ge=1, le=20)
 
     @model_validator(mode="after")
     def validate_recipe_input(self) -> "RecipeSuggestRequest":
-        if not self.pantry_items and not self.recognized_ingredients:
+        if (
+            not self.pantry_items
+            and not self.recognized_ingredients
+            and not self.inventory_item_ids
+        ):
             raise ValueError(
-                "pantry_items or recognized_ingredients is required"
+                "pantry_items, recognized_ingredients, or inventory_item_ids is required"
             )
         return self
 

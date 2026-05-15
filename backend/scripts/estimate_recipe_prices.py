@@ -9,8 +9,10 @@ Example:
 
 Notes:
 - Product prices are treated as EGP.
-- If category_level_1 == "Fresh Food" and no size is found in the product name,
-  the product price is treated as price per 1 kg.
+- If category_level_1 is "Fruits & Vegetables", the product price is treated
+  as price per 1 kg.
+- If category_level_1 is other fresh food and no size is found in the product
+  name, the product price is treated as price per 1 kg.
 - Matching is heuristic. Review low-confidence matches before trusting totals.
 """
 
@@ -19,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -30,10 +33,22 @@ import pandas as pd
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = BACKEND_ROOT.parent
-DEFAULT_PRODUCTS_CSV = REPO_ROOT / "data" / "Food" / "carrefour_barcode_products.csv"
+PRODUCTS_CSV_ENV = "CARREFOUR_PRODUCTS_CSV"
 DEFAULT_RECIPES_JSONL = REPO_ROOT / "data" / "Recipes" / "allrecipes_recipes.jsonl"
 DEFAULT_SUMMARY_CSV = REPO_ROOT / "data" / "Recipes" / "recipe_price_estimates.csv"
 DEFAULT_DETAILS_CSV = REPO_ROOT / "data" / "Recipes" / "ingredient_price_details.csv"
+
+
+def default_products_csv() -> Path:
+    raw_path = os.getenv(PRODUCTS_CSV_ENV)
+    if raw_path:
+        path = Path(raw_path)
+        return path if path.is_absolute() else REPO_ROOT / path
+
+    return REPO_ROOT / "data" / "Food" / "carrefour_test.csv"
+
+
+DEFAULT_PRODUCTS_CSV = default_products_csv()
 
 
 # -----------------------------
@@ -154,8 +169,25 @@ SKIP_IF_NO_QUANTITY_KEYWORDS = {
 #   "salt and pepper" -> "Red Bell Pepper"
 #   "rice" -> "Chicken and Herbs Flavor Instant Rice - 90 gm"
 PRODUCT_REJECT_RULES = {
-    "rice": {"chicken", "beef", "shrimp", "herbs", "flavor", "flavoured", "flavored", "ready", "meal", "cup", "noodles"},
-    "uncooked_instant_rice": {"chicken", "beef", "shrimp", "herbs", "flavor", "flavoured", "flavored", "ready", "meal", "cup", "noodles"},
+    "bread": {
+        "chicken", "beef", "fish", "meat", "curry", "escalope", "pane",
+        "panee", "kiev", "crumb", "crumbs", "breadcrumbs", "sticks", "snacks",
+        "ketchup", "pizza", "seasoning", "mix",
+    },
+    "rice": {
+        "chicken", "beef", "shrimp", "herbs", "flavor", "flavoured",
+        "flavored", "ready", "meal", "cup", "noodles", "flour", "pasta",
+        "cake", "spices", "curry", "vermicelli", "koshary", "kabsa",
+        "oriental", "mexican", "sayadia", "stuffed", "cabbage", "mahshi",
+        "kofta", "mombar", "vine", "leaves", "vinegar",
+    },
+    "uncooked_instant_rice": {
+        "chicken", "beef", "shrimp", "herbs", "flavor", "flavoured",
+        "flavored", "ready", "meal", "cup", "noodles", "flour", "pasta",
+        "cake", "spices", "curry", "vermicelli", "koshary", "kabsa",
+        "oriental", "mexican", "sayadia", "stuffed", "cabbage", "mahshi",
+        "kofta", "mombar", "vine", "leaves", "vinegar",
+    },
     "black_pepper": {"bell", "green", "red", "yellow", "capsicum", "vegetable", "fresh"},
     "salt_and_pepper": {"bell", "green", "red", "yellow", "capsicum", "vegetable", "fresh"},
     "salt_and_black_pepper": {"bell", "green", "red", "yellow", "capsicum", "vegetable", "fresh"},
@@ -163,6 +195,11 @@ PRODUCT_REJECT_RULES = {
 
 STAPLE_KEYS = {"rice", "uncooked_instant_rice", "flour", "flour_all_purpose", "all_purpose_flour", "sugar", "salt"}
 GLOBAL_MIN_MATCH_SCORE = 0.65
+DESCRIPTOR_TOKENS = {
+    "whole", "grain", "grains", "fresh", "frozen", "white", "brown", "red",
+    "green", "yellow", "black", "low", "fat", "full", "light", "lean",
+    "raw", "cooked", "boneless", "bone", "in", "skinless", "skin",
+}
 
 # Product-name words that add noise during matching.
 STOPWORDS = {
@@ -228,6 +265,17 @@ def normalize_unit(unit: Any) -> Optional[str]:
         "pounds": "pound",
         "lbs": "pound",
         "lb": "pound",
+        "pieces": "piece",
+        "pcs": "piece",
+        "pc": "piece",
+        "packs": "pack",
+        "packets": "packet",
+        "packages": "package",
+        "jars": "jar",
+        "cans": "can",
+        "bottles": "bottle",
+        "boxes": "box",
+        "bags": "bag",
     }
     return aliases.get(unit, unit)
 
@@ -249,6 +297,8 @@ def convert_quantity(qty: Optional[float], unit: Optional[str], ingredient_key: 
     try:
         qty = float(qty)
     except Exception:
+        return None
+    if math.isnan(qty):
         return None
 
     unit = normalize_unit(unit)
@@ -278,7 +328,7 @@ def convert_quantity(qty: Optional[float], unit: Optional[str], ingredient_key: 
     if unit in {"dash"}:
         return Amount(qty * 0.6, "ml")
 
-    if unit in {"can", "jar", "packet", "package", "bottle", "box", "bag"}:
+    if unit in {"piece", "can", "jar", "packet", "package", "pack", "bottle", "box", "bag"}:
         return Amount(qty, "unit")
 
     if key in EACH_WEIGHT_G:
@@ -291,6 +341,45 @@ def normalize_ingredient_key(value: Any) -> str:
     if value is None:
         return ""
     return str(value).lower().strip().replace("-", "_").replace(" ", "_")
+
+
+def ingredient_display_name(ingredient: dict[str, Any]) -> str:
+    """Return the best available ingredient name across supported recipe shapes."""
+    return str(
+        ingredient.get("name_normalized")
+        or ingredient.get("item")
+        or ingredient.get("name")
+        or ingredient.get("canonical_ingredient_id")
+        or ingredient.get("raw")
+        or ""
+    ).strip()
+
+
+def ingredient_key(ingredient: dict[str, Any]) -> str:
+    return str(
+        ingredient.get("canonical_ingredient_id")
+        or ingredient.get("name_normalized")
+        or ingredient.get("item")
+        or ingredient.get("name")
+        or ingredient.get("raw")
+        or ""
+    ).strip()
+
+
+def ingredient_quantity(ingredient: dict[str, Any]) -> Any:
+    if ingredient.get("quantity") is not None:
+        return ingredient.get("quantity")
+    return ingredient.get("amount")
+
+
+def ingredient_raw_text(ingredient: dict[str, Any]) -> Any:
+    return (
+        ingredient.get("raw")
+        or ingredient.get("item")
+        or ingredient.get("name")
+        or ingredient.get("name_normalized")
+        or ingredient.get("canonical_ingredient_id")
+    )
 
 
 def parse_product_size_from_name(name: str) -> Optional[Amount]:
@@ -306,6 +395,12 @@ def parse_product_size_from_name(name: str) -> Optional[Amount]:
     qty = float(match.group("qty").replace(",", "."))
     unit = normalize_unit(match.group("unit"))
     return convert_quantity(qty, unit, ingredient_key=None)
+
+
+def parse_product_size_from_columns(row: Any) -> Optional[Amount]:
+    quantity = row.get("package_size_quantity")
+    unit = row.get("package_size_unit")
+    return convert_quantity(quantity, unit, ingredient_key=None)
 
 
 def amount_compatible(a: Optional[Amount], b: Optional[Amount]) -> bool:
@@ -411,11 +506,32 @@ def prepare_products(products_csv: str | Path) -> pd.DataFrame:
         df.get("category_level_3", "").fillna("").astype(str) + " " +
         df.get("category_level_4", "").fillna("").astype(str)
     ).map(normalize_text)
-    df["product_size"] = df["name"].map(parse_product_size_from_name)
+    df["product_name_text"] = df["name"].fillna("").astype(str).map(normalize_text)
+    # Price estimation must use retail package size, not nutrition serving_size.
+    if {"package_size_quantity", "package_size_unit"}.issubset(df.columns):
+        df["product_size"] = df.apply(parse_product_size_from_columns, axis=1)
+    else:
+        df["product_size"] = None
 
-    # User-provided rule: Fresh Food without explicit product size is treated as 1 kg.
-    fresh_mask = df["category_level_1"].astype(str).str.lower().eq("fresh food")
-    df.loc[fresh_mask & df["product_size"].isna(), "product_size"] = [Amount(1000.0, "g")] * int((fresh_mask & df["product_size"].isna()).sum())
+    missing_product_size = df["product_size"].isna()
+    df.loc[missing_product_size, "product_size"] = df.loc[
+        missing_product_size, "name"
+    ].map(parse_product_size_from_name)
+
+    category_level_1 = df["category_level_1"].astype(str).str.lower()
+
+    # Carrefour fruit/vegetable prices are treated as price per kg.
+    produce_mask = category_level_1.eq("fruits & vegetables")
+    df.loc[produce_mask, "product_size"] = [
+        Amount(1000.0, "g")
+    ] * int(produce_mask.sum())
+
+    # Other fresh weighted items without explicit product size are treated as 1 kg.
+    fresh_mask = category_level_1.eq("fresh food")
+    missing_fresh_size_mask = fresh_mask & df["product_size"].isna()
+    df.loc[missing_fresh_size_mask, "product_size"] = [
+        Amount(1000.0, "g")
+    ] * int(missing_fresh_size_mask.sum())
     return df
 
 
@@ -425,6 +541,12 @@ def token_overlap_score(query: str, candidate: str) -> float:
     if not q_tokens or not c_tokens:
         return 0.0
     return len(q_tokens & c_tokens) / len(q_tokens)
+
+
+def food_kind_tokens(query: str) -> set[str]:
+    tokens = set(query.split())
+    kind_tokens = tokens - DESCRIPTOR_TOKENS
+    return kind_tokens or tokens
 
 
 def similarity_score(query: str, candidate: str) -> float:
@@ -446,8 +568,21 @@ def confidence_from_score(score: float) -> str:
     return "very_low"
 
 
+def optional_text(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    text = str(value).strip()
+    return text or None
+
+
 def ingredient_family(key_or_name: str) -> str:
     key = normalize_ingredient_key(key_or_name)
+    if "bread" in key and "crumb" not in key:
+        return "bread"
+    if "rice" in key and ("flour" in key or "vinegar" in key):
+        return key
     if "rice" in key:
         return "rice"
     if "black_pepper" in key or key in {"pepper", "salt_and_pepper", "salt_and_black_pepper"}:
@@ -474,11 +609,17 @@ def product_bonus_or_penalty(ingredient_key: str, needed_amount: Optional[Amount
     tokens = set(str(product_match_text).split())
     score_delta = 0.0
 
+    if family == "bread":
+        if "bread" in tokens:
+            score_delta += 0.20
+        if {"crumb", "crumbs", "breadcrumbs", "sticks", "snacks"} & tokens:
+            score_delta -= 0.35
+
     # For dry staples, prefer normal grocery packages over tiny flavored snack/meal packs.
     if family in {"rice"}:
         if product_amount and product_amount.unit_type == "g":
             if product_amount.quantity < 250:
-                score_delta -= 0.25
+                score_delta -= 0.05
             elif product_amount.quantity >= 500:
                 score_delta += 0.10
         if {"basmati", "egyptian", "white", "jasmine", "brown", "rice"} & tokens:
@@ -507,13 +648,23 @@ def find_best_product(products: pd.DataFrame, ingredient_name: str, needed_amoun
     if not query:
         return ProductMatch(None, None, None, None, None, None, 0.0, "very_low")
 
-    # First restrict to candidates with at least one token overlap when possible.
+    # First restrict to candidates with the concrete food kind when possible.
+    # Descriptor-only overlaps like "whole" must not beat the actual food word.
     q_tokens = set(query.split())
+    kind_tokens = food_kind_tokens(query)
     candidates = products
+    if kind_tokens:
+        kind_mask = products["product_name_text"].map(
+            lambda x: bool(kind_tokens & set(str(x).split()))
+        )
+        if kind_mask.any():
+            candidates = products[kind_mask]
+
+    # If no food-kind candidates exist, fall back to any token overlap.
     if q_tokens:
-        mask = products["match_text"].map(lambda x: bool(q_tokens & set(str(x).split())))
+        mask = candidates["match_text"].map(lambda x: bool(q_tokens & set(str(x).split())))
         if mask.any():
-            candidates = products[mask]
+            candidates = candidates[mask]
 
     best = None
     best_score = -1.0
@@ -521,10 +672,14 @@ def find_best_product(products: pd.DataFrame, ingredient_name: str, needed_amoun
     # Avoid scanning too many rows when candidate set is large.
     for idx, row in candidates.iterrows():
         product_text = row["match_text"]
-        if product_rejected_for_ingredient(str(ingredient_key), product_text):
+        product_name_text = row.get("product_name_text", product_text)
+        if product_rejected_for_ingredient(str(ingredient_key), product_name_text):
             continue
 
         score = similarity_score(query, product_text)
+        product_name_tokens = set(str(product_name_text).split())
+        if kind_tokens & product_name_tokens:
+            score += 0.18
 
         # Slight bonus when product package unit is compatible with recipe amount.
         product_amount = row.get("product_size")
@@ -537,6 +692,8 @@ def find_best_product(products: pd.DataFrame, ingredient_name: str, needed_amoun
         cat1 = str(row.get("category_level_1", "")).lower()
         if needed_amount and needed_amount.unit_type == "g" and cat1 == "beverages":
             score -= 0.08
+        if ingredient_family(str(ingredient_key)) == "rice" and cat1 != "food cupboard":
+            score -= 0.35
 
         if score > best_score:
             best_score = score
@@ -549,9 +706,9 @@ def find_best_product(products: pd.DataFrame, ingredient_name: str, needed_amoun
     score = max(0.0, min(1.0, best_score))
     return ProductMatch(
         idx=int(idx),
-        name=row.get("name"),
-        brand=row.get("brand"),
-        category_level_1=row.get("category_level_1"),
+        name=optional_text(row.get("name")),
+        brand=optional_text(row.get("brand")),
+        category_level_1=optional_text(row.get("category_level_1")),
         price=float(row.get("price")),
         package_amount=row.get("product_size"),
         score=score,
@@ -560,14 +717,14 @@ def find_best_product(products: pd.DataFrame, ingredient_name: str, needed_amoun
 
 
 def ingredient_needed_amount(ingredient: dict[str, Any]) -> Optional[Amount]:
-    key = ingredient.get("canonical_ingredient_id") or ingredient.get("name_normalized") or ingredient.get("raw")
-    qty = ingredient.get("quantity")
+    key = ingredient_key(ingredient)
+    qty = ingredient_quantity(ingredient)
     unit = ingredient.get("unit")
 
     # If recipe says "1 (15 ounce) can beans", use quantity * package_size.
     package_size = ingredient.get("package_size")
     unit_norm = normalize_unit(unit)
-    if package_size and unit_norm in {"can", "jar", "packet", "package", "bottle", "box", "bag"}:
+    if package_size and unit_norm in {"can", "jar", "packet", "package", "pack", "bottle", "box", "bag"}:
         amount = convert_package_size(package_size, multiplier=float(qty or 1.0))
         if amount:
             return amount
@@ -576,16 +733,18 @@ def ingredient_needed_amount(ingredient: dict[str, Any]) -> Optional[Amount]:
 
 
 def estimate_ingredient_cost(ingredient: dict[str, Any], products: pd.DataFrame) -> dict[str, Any]:
-    name = ingredient.get("name_normalized") or ingredient.get("canonical_ingredient_id") or ingredient.get("raw") or ""
-    key = ingredient.get("canonical_ingredient_id") or name
+    name = ingredient_display_name(ingredient)
+    key = ingredient_key(ingredient) or name
     key_norm = normalize_ingredient_key(key)
     needed = ingredient_needed_amount(ingredient)
-    raw_text = str(ingredient.get("raw") or "").lower()
+    raw = ingredient_raw_text(ingredient)
+    raw_text = str(raw or "").lower()
+    has_quantity = ingredient_quantity(ingredient) is not None
 
     # Do not price vague ingredients such as "salt and pepper to taste".
-    if needed is None or (ingredient.get("quantity") is None and ("to taste" in raw_text or key_norm in SKIP_IF_NO_QUANTITY_KEYWORDS)):
+    if needed is None or (not has_quantity and ("to taste" in raw_text or key_norm in SKIP_IF_NO_QUANTITY_KEYWORDS)):
         return {
-            "ingredient_raw": ingredient.get("raw"),
+            "ingredient_raw": raw,
             "ingredient_name": name,
             "needed_quantity": None,
             "needed_unit_type": None,
@@ -603,7 +762,7 @@ def estimate_ingredient_cost(ingredient: dict[str, Any], products: pd.DataFrame)
 
     if key_norm in FREE_INGREDIENTS:
         return {
-            "ingredient_raw": ingredient.get("raw"),
+            "ingredient_raw": raw,
             "ingredient_name": name,
             "needed_quantity": needed.quantity if needed else None,
             "needed_unit_type": needed.unit_type if needed else None,
@@ -623,7 +782,7 @@ def estimate_ingredient_cost(ingredient: dict[str, Any], products: pd.DataFrame)
 
     if match.score < GLOBAL_MIN_MATCH_SCORE:
         return {
-            "ingredient_raw": ingredient.get("raw"),
+            "ingredient_raw": raw,
             "ingredient_name": name,
             "needed_quantity": needed.quantity if needed else None,
             "needed_unit_type": needed.unit_type if needed else None,
@@ -666,7 +825,7 @@ def estimate_ingredient_cost(ingredient: dict[str, Any], products: pd.DataFrame)
             method = "fallback_full_package_price"
 
     return {
-        "ingredient_raw": ingredient.get("raw"),
+        "ingredient_raw": raw,
         "ingredient_name": name,
         "needed_quantity": needed.quantity if needed else None,
         "needed_unit_type": needed.unit_type if needed else None,

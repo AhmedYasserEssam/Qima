@@ -1,43 +1,86 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.api.deps.auth import get_optional_current_user
+from app.models.user import User
 from app.schemas.v1.recipes import (
-    GroundedReference,
-    GroundingMetadata,
     RecipeCandidate,
     RecipeDiscussRequest,
     RecipeDiscussResponse,
     RecipeSource,
     RecipeSuggestRequest,
     RecipeSuggestResponse,
-    SafetyFlags,
 )
+from app.services.exceptions import (
+    BadRequestError,
+    NotFoundError,
+    UpstreamUnavailableError,
+)
+from app.services.inventory_service import inventory_service
+from app.services.recipe_service import recipe_service
 
 router = APIRouter()
 
 
 @router.post("/suggest", response_model=RecipeSuggestResponse)
-async def suggest_recipes(payload: RecipeSuggestRequest) -> RecipeSuggestResponse:
-    return RecipeSuggestResponse(
-        recipes=[
-            RecipeCandidate(
-                recipe_id="recipe_stub_001",
-                title="Simple Lentil Rice Bowl",
-                match_score=0.91,
-                matched_ingredients=payload.pantry_items
-                or payload.recognized_ingredients
-                or [],
-                missing_ingredients=["onion", "tomato sauce"],
-                exclusions=payload.dietary_filters + payload.excluded_ingredients,
-                warnings=[],
-                grounding_metadata=GroundingMetadata(
-                    retrieved_from="recipe_corpus_primary",
-                    matched_count=len(
-                        payload.pantry_items or payload.recognized_ingredients or []
-                    ),
-                    missing_count=2,
-                ),
+async def suggest_recipes(
+    payload: RecipeSuggestRequest,
+    current_user: User | None = Depends(get_optional_current_user),
+) -> RecipeSuggestResponse:
+    merged_ingredients = _merge_ingredients(
+        pantry_items=payload.pantry_items,
+        recognized_ingredients=payload.recognized_ingredients,
+    )
+
+    if payload.inventory_item_ids:
+        if current_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication is required when using inventory_item_ids.",
             )
-        ],
+        try:
+            inventory_items = inventory_service.resolve_item_names_for_user(
+                user=current_user,
+                item_ids=payload.inventory_item_ids,
+            )
+        except BadRequestError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+        merged_ingredients = _merge_ingredients(
+            pantry_items=merged_ingredients,
+            recognized_ingredients=inventory_items,
+        )
+
+    dietary_filters = list(payload.dietary_filters)
+    if payload.budget_level == "low" and "budget_friendly" not in dietary_filters:
+        dietary_filters.append("budget_friendly")
+
+    try:
+        recipes = recipe_service.suggest_recipes(
+            requested_ingredients=merged_ingredients,
+            dietary_filters=dietary_filters,
+            excluded_ingredients=payload.excluded_ingredients,
+            max_results=payload.max_results,
+        )
+    except NotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except UpstreamUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+    for candidate in recipes:
+        candidate.exclusions = list(
+            dict.fromkeys(dietary_filters + payload.excluded_ingredients)
+        )
+
+    return RecipeSuggestResponse(
+        recipes=recipes,
         source=RecipeSource(
             dataset="recipe_corpus_primary",
             retrieval_mode="retrieval_first",
@@ -47,51 +90,58 @@ async def suggest_recipes(payload: RecipeSuggestRequest) -> RecipeSuggestRespons
     )
 
 
+def _merge_ingredients(
+    *,
+    pantry_items: list[str] | None,
+    recognized_ingredients: list[str] | None,
+) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for item in (pantry_items or []) + (recognized_ingredients or []):
+        cleaned = str(item).strip()
+        if not cleaned:
+            continue
+        key = cleaned.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(cleaned)
+    return merged
+
+
 @router.post("/discuss", response_model=RecipeDiscussResponse)
 async def discuss_recipe(payload: RecipeDiscussRequest) -> RecipeDiscussResponse:
-    title = (
-        payload.candidate_context.title
-        if payload.candidate_context
-        else "Simple Lentil Rice Bowl"
-    )
-
-    recipe_id = payload.recipe_id or "recipe_stub_001"
-
-    return RecipeDiscussResponse(
-        answer="This is a grounded stub answer based on the selected recipe context.",
-        grounded_references=[
-            GroundedReference(
-                recipe_id=recipe_id,
-                title=title,
-                reference_type="metadata",
-                reference_text="Stub recipe context used for discussion.",
-            )
-        ],
-        safety_flags=SafetyFlags(
-            allergen_risk=False,
-            undercooked_risk=False,
-            cross_contamination_risk=False,
-            diet_conflict=False,
-            notes=[],
-        ),
-        warnings=["Stub response. Replace with retrieved recipe context later."],
-        latency_ms=140,
-    )
+    try:
+        return recipe_service.discuss_recipe(
+            recipe_id=payload.recipe_id,
+            candidate_title=payload.candidate_context.title
+            if payload.candidate_context
+            else None,
+            question=payload.question,
+        )
+    except NotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except UpstreamUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get("/{recipe_id}", response_model=RecipeCandidate)
 async def get_recipe(recipe_id: str) -> RecipeCandidate:
-    return RecipeCandidate(
-        recipe_id=recipe_id,
-        title="Simple Lentil Rice Bowl",
-        match_score=0.88,
-        matched_ingredients=["rice", "lentils"],
-        missing_ingredients=["onion", "tomato sauce"],
-        exclusions=[],
-        warnings=["Mock recipe detail response."],
-        grounding_metadata=GroundingMetadata(
-            retrieved_from="recipe_corpus_primary",
-            matched_count=2,
-            missing_count=2,
-        ),
-    )
+    try:
+        return recipe_service.get_recipe_candidate(recipe_id)
+    except NotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except UpstreamUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc

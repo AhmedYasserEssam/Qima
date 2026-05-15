@@ -1037,6 +1037,24 @@ class ApiClient {
     }
   }
 
+  Future<ApiPayload> delete(
+    String path, {
+    required List<String> requiredFields,
+  }) async {
+    try {
+      final response = await client
+          .delete(_uri(path), headers: _headers())
+          .timeout(requestTimeout);
+      return _parseResponse(response, requiredFields);
+    } on ApiFailure {
+      rethrow;
+    } on TimeoutException {
+      throw ApiFailure.network('Request timed out after $requestTimeout.');
+    } on Exception catch (error) {
+      throw ApiFailure.network(error.toString());
+    }
+  }
+
   Future<ApiPayload> uploadImage(
     String path,
     XFile image, {
@@ -1293,6 +1311,117 @@ final chatControllerProvider =
       (ref) => EndpointController(ref.read(apiClientProvider)),
     );
 
+final inventoryControllerProvider =
+    StateNotifierProvider<InventoryController, AsyncValue<List<InventoryItemRecord>>>(
+      (ref) => InventoryController(ref.read(apiClientProvider)),
+    );
+
+
+class InventoryController extends StateNotifier<AsyncValue<List<InventoryItemRecord>>> {
+  InventoryController(this._client) : super(const AsyncValue.loading()) {
+    unawaited(refresh());
+  }
+
+  final ApiClient _client;
+
+  Future<void> refresh() async {
+    state = const AsyncValue.loading();
+    await _sync();
+  }
+
+  Future<void> addManualItems(List<String> itemNames) async {
+    final body = buildInventoryManualAddBody(itemNames);
+    await _client.post(
+      '/v1/inventory/items/manual',
+      body,
+      requiredFields: ['items'],
+    );
+    await _sync();
+  }
+
+  Future<void> addFromImageSelection(InventoryImageSelection selection) async {
+    final body = buildInventoryImageAddBody(selection);
+    await _client.post(
+      '/v1/inventory/items/from-image',
+      body,
+      requiredFields: ['items'],
+    );
+    await _sync();
+  }
+
+  Future<void> addFromBarcode(String barcode) async {
+    await _client.post(
+      '/v1/inventory/items/from-barcode',
+      {'barcode': barcode},
+      requiredFields: ['items'],
+    );
+    await _sync();
+  }
+
+  Future<void> deleteItem(int itemId) async {
+    await _client.delete(
+      '/v1/inventory/items/$itemId',
+      requiredFields: ['deleted_item_id'],
+    );
+    await _sync();
+  }
+
+  Future<InventoryClearResult> clearAll() async {
+    final current = state.valueOrNull ?? await _fetchItems();
+    var deletedCount = 0;
+    final failedIds = <int>[];
+
+    for (final item in current) {
+      try {
+        await _client.delete(
+          '/v1/inventory/items/${item.id}',
+          requiredFields: ['deleted_item_id'],
+        );
+        deletedCount += 1;
+      } on ApiFailure {
+        failedIds.add(item.id);
+      }
+    }
+
+    await _sync();
+    return InventoryClearResult(
+      deletedCount: deletedCount,
+      failedIds: failedIds,
+    );
+  }
+
+  Future<void> _sync() async {
+    try {
+      final items = await _fetchItems();
+      state = AsyncValue.data(items);
+    } catch (error, stackTrace) {
+      state = AsyncValue.error(error, stackTrace);
+      rethrow;
+    }
+  }
+
+  Future<List<InventoryItemRecord>> _fetchItems() async {
+    final payload = await _client.get(
+      '/v1/inventory/items',
+      requiredFields: ['items'],
+    );
+    return inventoryItemsFromPayload(payload.raw);
+  }
+}
+
+
+class InventoryClearResult {
+  const InventoryClearResult({
+    required this.deletedCount,
+    required this.failedIds,
+  });
+
+  final int deletedCount;
+  final List<int> failedIds;
+
+  int get failedCount => failedIds.length;
+}
+
 const noReliableVisionNutritionInputMessage =
     'No reliable nutrition input was found from this image.';
 
@@ -1422,6 +1551,8 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
             value: scanState,
             onRetry: _lookupBarcode,
             onEstimateNutritionFromVision: _estimateNutritionFromVision,
+            onAddBarcodeToInventory: _addBarcodeScanToInventory,
+            onAddInventoryFromVision: _addVisionIngredientsToInventory,
           ),
         ),
         AsyncPayloadView(
@@ -1526,6 +1657,47 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
         );
   }
 
+  Future<void> _addBarcodeScanToInventory(Map<String, Object?> raw) async {
+    final barcode = inventoryBarcodeFromScanPayload(raw);
+    if (barcode == null) {
+      showValidation(context, 'Could not determine a valid barcode from this result.');
+      return;
+    }
+
+    try {
+      await ref.read(inventoryControllerProvider.notifier).addFromBarcode(barcode);
+      if (mounted) {
+        showValidation(context, 'Added to inventory.');
+      }
+    } on ApiFailure catch (error) {
+      if (mounted) {
+        showValidation(context, error.message);
+      }
+    }
+  }
+
+  Future<void> _addVisionIngredientsToInventory(InventoryImageSelection selection) async {
+    if (selection.selectedIngredients.isEmpty) {
+      showValidation(context, 'Select at least one ingredient to add.');
+      return;
+    }
+    try {
+      await ref
+          .read(inventoryControllerProvider.notifier)
+          .addFromImageSelection(selection);
+      if (mounted) {
+        showValidation(
+          context,
+          'Added ${selection.selectedIngredients.length} item(s) to inventory.',
+        );
+      }
+    } on ApiFailure catch (error) {
+      if (mounted) {
+        showValidation(context, error.message);
+      }
+    }
+  }
+
   void _scrollToScanResult() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
@@ -1602,22 +1774,30 @@ class RecipesScreen extends ConsumerStatefulWidget {
 }
 
 class _RecipesScreenState extends ConsumerState<RecipesScreen> {
-  final pantryController = TextEditingController(text: 'rice, lentils');
-  final budgetController = TextEditingController(text: '60');
-  final geographyController = TextEditingController(text: 'Cairo');
+  final pantryController = TextEditingController();
+  final manualInventoryController = TextEditingController();
   final recipeIdController = TextEditingController(text: 'recipe_stub_001');
   final questionController = TextEditingController(
     text: 'Can you make this recipe more price friendly?',
   );
-  bool priceAware = true;
-  bool usePantryAsOwned = true;
-  String rankingMode = 'budget_friendly';
+  final Set<int> selectedInventoryItemIds = <int>{};
+  String budgetLevel = 'mid';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      unawaited(_refreshInventory());
+    });
+  }
 
   @override
   void dispose() {
     pantryController.dispose();
-    budgetController.dispose();
-    geographyController.dispose();
+    manualInventoryController.dispose();
     recipeIdController.dispose();
     questionController.dispose();
     super.dispose();
@@ -1625,9 +1805,119 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final inventoryState = ref.watch(inventoryControllerProvider);
+    final inventoryItems = inventoryState.valueOrNull ?? const <InventoryItemRecord>[];
+    final inventoryLoading = inventoryState.isLoading;
+    final inventoryError = inventoryState.error;
+
     return EndpointPage(
       title: 'Recipes',
       children: [
+        InputCard(
+          title: 'Inventory',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Select items to use for recipe generation.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Refresh inventory',
+                    onPressed: inventoryLoading ? null : _refreshInventory,
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ],
+              ),
+              TextFormField(
+                controller: manualInventoryController,
+                decoration: const InputDecoration(
+                  labelText: 'Add inventory items',
+                  helperText: 'Comma-separated, for example: rice, lentils',
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.icon(
+                    onPressed: _addManualInventoryItems,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: inventoryItems.isEmpty ? null : _confirmClearInventory,
+                    icon: const Icon(Icons.delete_sweep_outlined),
+                    label: const Text('Clear inventory'),
+                  ),
+                ],
+              ),
+              if (inventoryLoading) ...[
+                const SizedBox(height: 8),
+                const LinearProgressIndicator(),
+              ],
+              if (inventoryError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  inventoryError is ApiFailure
+                      ? inventoryError.message
+                      : inventoryError.toString(),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: 8),
+              if (inventoryItems.isEmpty)
+                Text(
+                  'No inventory items yet.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                )
+              else
+                Column(
+                  children: [
+                    for (final item in inventoryItems)
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: selectedInventoryItemIds.contains(item.id),
+                            onChanged: (value) {
+                              setState(() {
+                                if (value == true) {
+                                  selectedInventoryItemIds.add(item.id);
+                                } else {
+                                  selectedInventoryItemIds.remove(item.id);
+                                }
+                              });
+                            },
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(item.name),
+                                Text(
+                                  'Source: ${item.sourceMethod}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Remove item',
+                            onPressed: () => _removeInventoryItem(item),
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+            ],
+          ),
+        ),
         InputCard(
           title: 'Recipe suggestions',
           child: Column(
@@ -1640,47 +1930,20 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
                   helperText: 'Comma-separated',
                 ),
               ),
-              TextFormField(
-                controller: budgetController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Max recipe cost EGP',
-                ),
-              ),
-              TextFormField(
-                controller: geographyController,
-                decoration: const InputDecoration(labelText: 'Price geography'),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Use price-aware ranking'),
-                subtitle: const Text('Estimated, not live market prices.'),
-                value: priceAware,
-                onChanged: (value) => setState(() => priceAware = value),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Treat pantry as already owned'),
-                subtitle: const Text('Ranks by missing ingredient cost.'),
-                value: usePantryAsOwned,
-                onChanged: priceAware
-                    ? (value) => setState(() => usePantryAsOwned = value)
-                    : null,
-              ),
               DropdownButtonFormField<String>(
-                initialValue: rankingMode,
-                decoration: const InputDecoration(labelText: 'Ranking mode'),
-                items: options([
-                  'budget_friendly',
-                  'lowest_cost',
-                  'best_match',
-                  'balanced',
-                  'cost_per_protein',
-                ]),
-                onChanged: priceAware
-                    ? (value) =>
-                          setState(() => rankingMode = value ?? rankingMode)
-                    : null,
+                initialValue: budgetLevel,
+                decoration: const InputDecoration(labelText: 'Budget level'),
+                items: const [
+                  DropdownMenuItem(value: 'low', child: Text('Low')),
+                  DropdownMenuItem(value: 'mid', child: Text('Medium')),
+                  DropdownMenuItem(value: 'high', child: Text('High')),
+                ],
+                onChanged: (value) {
+                  if (value == null) {
+                    return;
+                  }
+                  setState(() => budgetLevel = value);
+                },
               ),
               const SizedBox(height: 8),
               FilledButton.icon(
@@ -1733,41 +1996,125 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
       .where((item) => item.isNotEmpty)
       .toList();
 
-  void _suggest() {
-    final items = _items();
-    final budget = double.tryParse(budgetController.text.trim());
-    final geography = geographyController.text.trim();
+  Future<void> _refreshInventory() async {
+    try {
+      await ref.read(inventoryControllerProvider.notifier).refresh();
+    } on ApiFailure catch (error) {
+      if (mounted) {
+        showValidation(context, error.message);
+      }
+    }
+  }
+
+  Future<void> _addManualInventoryItems() async {
+    final body = buildInventoryManualAddBody(
+      manualInventoryController.text.split(','),
+    );
+    final items = (body['items'] as List<Object?>).cast<String>();
     if (items.isEmpty) {
-      showValidation(context, 'At least one pantry item is required.');
+      showValidation(context, 'Enter at least one inventory item.');
       return;
     }
-    if (priceAware &&
-        budgetController.text.trim().isNotEmpty &&
-        budget == null) {
-      showValidation(context, 'Max recipe cost must be a number.');
+    try {
+      await ref.read(inventoryControllerProvider.notifier).addManualItems(items);
+      manualInventoryController.clear();
+      if (mounted) {
+        showValidation(context, 'Inventory updated.');
+      }
+    } on ApiFailure catch (error) {
+      if (mounted) {
+        showValidation(context, error.message);
+      }
+    }
+  }
+
+  Future<void> _removeInventoryItem(InventoryItemRecord item) async {
+    try {
+      await ref.read(inventoryControllerProvider.notifier).deleteItem(item.id);
+      if (mounted) {
+        setState(() => selectedInventoryItemIds.remove(item.id));
+        showValidation(context, 'Removed ${item.name}.');
+      }
+    } on ApiFailure catch (error) {
+      if (mounted) {
+        showValidation(context, error.message);
+      }
+    }
+  }
+
+  Future<void> _confirmClearInventory() async {
+    final shouldClear = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear inventory'),
+        content: const Text(
+          'This will remove all inventory items for your account.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    if (shouldClear != true) {
       return;
     }
+
+    try {
+      final result = await ref.read(inventoryControllerProvider.notifier).clearAll();
+      if (!mounted) {
+        return;
+      }
+      setState(selectedInventoryItemIds.clear);
+      if (result.failedCount == 0) {
+        showValidation(context, 'Inventory cleared.');
+      } else {
+        showValidation(
+          context,
+          'Cleared ${result.deletedCount} item(s); failed ${result.failedCount}.',
+        );
+      }
+    } on ApiFailure catch (error) {
+      if (mounted) {
+        showValidation(context, error.message);
+      }
+    }
+  }
+
+  void _suggest() {
+    final pantryItems = _items();
+    final availableItems = ref.read(inventoryControllerProvider).valueOrNull ?? const <InventoryItemRecord>[];
+    final availableIds = availableItems.map((item) => item.id).toSet();
+    final selectedInventoryIds = selectedInventoryItemIds
+        .where((id) => availableIds.contains(id))
+        .toList();
+
+    if (pantryItems.isEmpty && selectedInventoryIds.isEmpty) {
+      showValidation(
+        context,
+        'Select inventory items or enter pantry items before suggesting recipes.',
+      );
+      return;
+    }
+
+    final body = buildRecipeSuggestRequestBody(
+      budgetLevel: budgetLevel,
+      inventoryItemIds: selectedInventoryIds,
+      pantryItems: pantryItems,
+    );
+
     ref
         .read(recipeControllerProvider.notifier)
         .run(
           (client) => client.post(
             '/v1/recipes/suggest',
-            {
-              'pantry_items': items,
-              'dietary_filters': priceAware ? ['budget_friendly'] : <String>[],
-              if (priceAware)
-                'budget': priceBudgetContext(
-                  maxTotalCost: budget,
-                  geography: geography,
-                ),
-              if (priceAware)
-                'price_preferences': {
-                  'price_aware': true,
-                  'ranking_mode': rankingMode,
-                  'include_item_costs': true,
-                  'use_pantry_as_owned': usePantryAsOwned,
-                },
-            },
+            body,
             requiredFields: ['recipes', 'source'],
           ),
         );
@@ -1800,16 +2147,11 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
   }
 
   Map<String, Object?> _priceContext() {
-    final budget = double.tryParse(budgetController.text.trim());
-    final geography = geographyController.text.trim();
+    final selectedIds = selectedInventoryItemIds.toList();
     return {
-      'budget': priceBudgetContext(maxTotalCost: budget, geography: geography),
-      'price_preferences': {
-        'price_aware': priceAware,
-        'ranking_mode': rankingMode,
-        'include_item_costs': true,
-        'use_pantry_as_owned': usePantryAsOwned,
-      },
+      'budget_level': budgetLevel,
+      'inventory_item_ids': selectedIds,
+      'pantry_items': _items(),
       'latest_recipe_suggestions':
           ref.read(recipeControllerProvider)?.valueOrNull?.raw['recipes'] ??
           <Object?>[],
@@ -2844,12 +3186,16 @@ class AsyncPayloadView extends ConsumerWidget {
     required this.value,
     required this.onRetry,
     this.onEstimateNutritionFromVision,
+    this.onAddBarcodeToInventory,
+    this.onAddInventoryFromVision,
   });
 
   final String title;
   final AsyncValue<ApiPayload>? value;
   final VoidCallback onRetry;
   final ValueChanged<Map<String, Object?>>? onEstimateNutritionFromVision;
+  final Future<void> Function(Map<String, Object?> raw)? onAddBarcodeToInventory;
+  final Future<void> Function(InventoryImageSelection selection)? onAddInventoryFromVision;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -2862,6 +3208,8 @@ class AsyncPayloadView extends ConsumerWidget {
         title: title,
         payload: payload,
         onEstimateNutritionFromVision: onEstimateNutritionFromVision,
+        onAddBarcodeToInventory: onAddBarcodeToInventory,
+        onAddInventoryFromVision: onAddInventoryFromVision,
       ),
       error: (error, stackTrace) {
         final failure = error is ApiFailure
@@ -2962,11 +3310,15 @@ class PayloadCard extends ConsumerWidget {
     required this.title,
     required this.payload,
     this.onEstimateNutritionFromVision,
+    this.onAddBarcodeToInventory,
+    this.onAddInventoryFromVision,
   });
 
   final String title;
   final ApiPayload payload;
   final ValueChanged<Map<String, Object?>>? onEstimateNutritionFromVision;
+  final Future<void> Function(Map<String, Object?> raw)? onAddBarcodeToInventory;
+  final Future<void> Function(InventoryImageSelection selection)? onAddInventoryFromVision;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -2997,11 +3349,15 @@ class PayloadCard extends ConsumerWidget {
                 message: payload.partialReasons.join('\n'),
               ),
             if (isBarcodeScan)
-              BarcodeScanResultView(raw: raw)
+              BarcodeScanResultView(
+                raw: raw,
+                onAddToInventory: onAddBarcodeToInventory,
+              )
             else if (isVisionIdentify)
               VisionIdentifyResultView(
                 raw: raw,
                 onEstimateNutrition: onEstimateNutritionFromVision,
+                onAddToInventory: onAddInventoryFromVision,
               )
             else if (isNutritionEstimate)
               NutritionEstimateResultView(raw: raw)
@@ -3033,9 +3389,14 @@ class PayloadCard extends ConsumerWidget {
 }
 
 class BarcodeScanResultView extends StatelessWidget {
-  const BarcodeScanResultView({super.key, required this.raw});
+  const BarcodeScanResultView({
+    super.key,
+    required this.raw,
+    this.onAddToInventory,
+  });
 
   final Map<String, Object?> raw;
+  final Future<void> Function(Map<String, Object?> raw)? onAddToInventory;
 
   @override
   Widget build(BuildContext context) {
@@ -3109,6 +3470,13 @@ class BarcodeScanResultView extends StatelessWidget {
         const SizedBox(height: 6),
         Text(ingredients, style: Theme.of(context).textTheme.bodyMedium),
         const SizedBox(height: 12),
+        if (onAddToInventory != null)
+          FilledButton.icon(
+            onPressed: () => onAddToInventory!(raw),
+            icon: const Icon(Icons.inventory_2_outlined),
+            label: const Text('Add to inventory'),
+          ),
+        if (onAddToInventory != null) const SizedBox(height: 12),
         const SectionHeader(title: 'Allergens'),
         const SizedBox(height: 6),
         Container(
@@ -3178,23 +3546,83 @@ class BarcodeScanResultView extends StatelessWidget {
   }
 }
 
-class VisionIdentifyResultView extends StatelessWidget {
+class VisionIdentifyResultView extends StatefulWidget {
   const VisionIdentifyResultView({
     super.key,
     required this.raw,
     this.onEstimateNutrition,
+    this.onAddToInventory,
   });
 
   final Map<String, Object?> raw;
   final ValueChanged<Map<String, Object?>>? onEstimateNutrition;
+  final Future<void> Function(InventoryImageSelection selection)? onAddToInventory;
+
+  @override
+  State<VisionIdentifyResultView> createState() => _VisionIdentifyResultViewState();
+}
+
+class _VisionIdentifyResultViewState extends State<VisionIdentifyResultView> {
+  Set<String> _selectedIngredientKeys = <String>{};
+  bool _submittingInventory = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _resetSelection();
+  }
+
+  @override
+  void didUpdateWidget(covariant VisionIdentifyResultView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final previousImageId = text(oldWidget.raw['image_id'], fallback: '').trim();
+    final currentImageId = text(widget.raw['image_id'], fallback: '').trim();
+    if (previousImageId != currentImageId || !mapEquals(oldWidget.raw, widget.raw)) {
+      _resetSelection();
+    }
+  }
+
+  void _resetSelection() {
+    final recognized = _recognizedIngredientNames();
+    _selectedIngredientKeys = {
+      for (final name in recognized)
+        _normalizedVisionName(name),
+    };
+  }
+
+  List<String> _recognizedIngredientNames() {
+    final candidates = visionCandidates(widget.raw['ingredients']);
+    final names = <String>[];
+    final seen = <String>{};
+    for (final candidate in candidates) {
+      final cleaned = candidate.name.trim();
+      if (cleaned.isEmpty) {
+        continue;
+      }
+      final key = _normalizedVisionName(cleaned);
+      if (key.isEmpty || seen.contains(key)) {
+        continue;
+      }
+      seen.add(key);
+      names.add(cleaned);
+    }
+    return names;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final raw = widget.raw;
     final dishCandidates = visionCandidates(raw['dish_candidates']);
     final ingredientCandidates = visionCandidates(raw['ingredients']);
     final topCandidate = dishCandidates.isEmpty ? null : dishCandidates.first;
     final confidence = number(raw['confidence']);
     final warnings = textList(raw['warnings']);
+    final recognizedNames = _recognizedIngredientNames();
+    final candidateByKey = <String, VisionCandidate>{};
+    for (final candidate in ingredientCandidates) {
+      final key = _normalizedVisionName(candidate.name);
+      candidateByKey.putIfAbsent(key, () => candidate);
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3259,21 +3687,89 @@ class VisionIdentifyResultView extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyMedium,
           )
         else
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
+          Column(
             children: [
-              for (final candidate in ingredientCandidates)
-                Chip(
-                  label: Text(visionCandidateChipLabel(candidate)),
-                  visualDensity: VisualDensity.compact,
+              for (final ingredientName in recognizedNames)
+                CheckboxListTile(
+                  value: _selectedIngredientKeys.contains(
+                    _normalizedVisionName(ingredientName),
+                  ),
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: Text(ingredientName),
+                  subtitle: Builder(
+                    builder: (_) {
+                      final candidate = candidateByKey[_normalizedVisionName(ingredientName)];
+                      if (candidate == null || candidate.confidence == null) {
+                        return const SizedBox.shrink();
+                      }
+                      return Text(formatConfidence(candidate.confidence!));
+                    },
+                  ),
+                  onChanged: (selected) {
+                    setState(() {
+                      final key = _normalizedVisionName(ingredientName);
+                      if (selected == true) {
+                        _selectedIngredientKeys.add(key);
+                      } else {
+                        _selectedIngredientKeys.remove(key);
+                      }
+                    });
+                  },
                 ),
             ],
           ),
-        if (onEstimateNutrition != null) ...[
+        if (widget.onAddToInventory != null) ...[
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: _submittingInventory
+                ? null
+                : () async {
+                    final imageId = text(raw['image_id'], fallback: '').trim();
+                    if (imageId.isEmpty) {
+                      showValidation(
+                        context,
+                        'Could not determine image id for inventory submission.',
+                      );
+                      return;
+                    }
+
+                    final selectedIngredients = [
+                      for (final name in recognizedNames)
+                        if (_selectedIngredientKeys.contains(_normalizedVisionName(name)))
+                          name,
+                    ];
+                    if (selectedIngredients.isEmpty) {
+                      showValidation(context, 'Select at least one ingredient to add.');
+                      return;
+                    }
+
+                    final selection = InventoryImageSelection(
+                      imageId: imageId,
+                      recognizedIngredients: recognizedNames,
+                      selectedIngredients: selectedIngredients,
+                    );
+                    setState(() => _submittingInventory = true);
+                    try {
+                      await widget.onAddToInventory!(selection);
+                    } finally {
+                      if (mounted) {
+                        setState(() => _submittingInventory = false);
+                      }
+                    }
+                  },
+            icon: const Icon(Icons.playlist_add_outlined),
+            label: Text(
+              _submittingInventory
+                  ? 'Adding...'
+                  : 'Add selected to inventory',
+            ),
+          ),
+        ],
+        if (widget.onEstimateNutrition != null) ...[
           const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: () => onEstimateNutrition!(raw),
+            onPressed: () => widget.onEstimateNutrition!(raw),
             icon: const Icon(Icons.calculate_outlined),
             label: const Text('Estimate nutrition'),
           ),
@@ -3894,6 +4390,180 @@ class VisionCandidate {
   final double? confidence;
 }
 
+class InventoryItemRecord {
+  const InventoryItemRecord({
+    required this.id,
+    required this.name,
+    required this.normalizedName,
+    required this.sourceMethod,
+    required this.sourceRef,
+    required this.sourceProductId,
+  });
+
+  final int id;
+  final String name;
+  final String normalizedName;
+  final String sourceMethod;
+  final String? sourceRef;
+  final String? sourceProductId;
+}
+
+class InventoryImageSelection {
+  const InventoryImageSelection({
+    required this.imageId,
+    required this.recognizedIngredients,
+    required this.selectedIngredients,
+  });
+
+  final String imageId;
+  final List<String> recognizedIngredients;
+  final List<String> selectedIngredients;
+}
+
+List<InventoryItemRecord> inventoryItemsFromPayload(Map<String, Object?> raw) {
+  final rawItems = raw['items'];
+  if (rawItems is! List) {
+    return const [];
+  }
+
+  final items = <InventoryItemRecord>[];
+  for (final item in rawItems) {
+    if (item is! Map) {
+      continue;
+    }
+
+    final id = _asInt(item['id']);
+    final name = text(item['name'], fallback: '').trim();
+    if (id == null || name.isEmpty) {
+      continue;
+    }
+
+    items.add(
+      InventoryItemRecord(
+        id: id,
+        name: name,
+        normalizedName: text(item['normalized_name'], fallback: '').trim(),
+        sourceMethod: text(item['source_method'], fallback: 'manual').trim(),
+        sourceRef: text(item['source_ref'], fallback: '').trim().isEmpty
+            ? null
+            : text(item['source_ref'], fallback: '').trim(),
+        sourceProductId: text(item['source_product_id'], fallback: '').trim().isEmpty
+            ? null
+            : text(item['source_product_id'], fallback: '').trim(),
+      ),
+    );
+  }
+  return items;
+}
+
+Map<String, Object?> buildInventoryManualAddBody(List<String> itemNames) {
+  final cleaned = <String>[];
+  for (final item in itemNames) {
+    final value = item.trim();
+    if (value.isEmpty) {
+      continue;
+    }
+    cleaned.add(value);
+  }
+  return {'items': cleaned};
+}
+
+Map<String, Object?> buildInventoryImageAddBody(InventoryImageSelection selection) {
+  return {
+    'image_id': selection.imageId.trim(),
+    'recognized_ingredients': [
+      for (final ingredient in selection.recognizedIngredients)
+        if (ingredient.trim().isNotEmpty) ingredient.trim(),
+    ],
+    'selected_ingredients': [
+      for (final ingredient in selection.selectedIngredients)
+        if (ingredient.trim().isNotEmpty) ingredient.trim(),
+    ],
+  };
+}
+
+Map<String, Object?> buildRecipeSuggestRequestBody({
+  required String budgetLevel,
+  required List<int> inventoryItemIds,
+  required List<String> pantryItems,
+  List<String> dietaryFilters = const [],
+  List<String> excludedIngredients = const [],
+  int? maxResults,
+}) {
+  final dedupedPantryItems = <String>[];
+  final seenPantry = <String>{};
+  for (final item in pantryItems) {
+    final cleaned = item.trim();
+    if (cleaned.isEmpty) {
+      continue;
+    }
+    final key = cleaned.toLowerCase();
+    if (seenPantry.contains(key)) {
+      continue;
+    }
+    seenPantry.add(key);
+    dedupedPantryItems.add(cleaned);
+  }
+
+  final dedupedInventoryIds = <int>[];
+  final seenIds = <int>{};
+  for (final id in inventoryItemIds) {
+    if (id < 1 || seenIds.contains(id)) {
+      continue;
+    }
+    seenIds.add(id);
+    dedupedInventoryIds.add(id);
+  }
+
+  final normalizedBudget = ['low', 'mid', 'high'].contains(budgetLevel)
+      ? budgetLevel
+      : 'mid';
+
+  return {
+    if (dedupedPantryItems.isNotEmpty) 'pantry_items': dedupedPantryItems,
+    if (dedupedInventoryIds.isNotEmpty) 'inventory_item_ids': dedupedInventoryIds,
+    if (dietaryFilters.isNotEmpty) 'dietary_filters': dietaryFilters,
+    if (excludedIngredients.isNotEmpty)
+      'excluded_ingredients': excludedIngredients,
+    ...switch (maxResults) {
+      final value? => {'max_results': value},
+      null => const <String, Object?>{},
+    },
+    'budget_level': normalizedBudget,
+  };
+}
+
+String? inventoryBarcodeFromScanPayload(Map<String, Object?> raw) {
+  final barcodePattern = RegExp(r'^[0-9]{8,14}$');
+
+  final source = raw['source'];
+  if (source is Map) {
+    final providerProductId = text(source['provider_product_id'], fallback: '').trim();
+    if (barcodePattern.hasMatch(providerProductId)) {
+      return providerProductId;
+    }
+  }
+
+  final productId = text(raw['product_id'], fallback: '').trim();
+  if (productId.isNotEmpty) {
+    final offMatch = RegExp(r'^off:([0-9]{8,14})$').firstMatch(productId);
+    if (offMatch != null) {
+      return offMatch.group(1);
+    }
+
+    if (barcodePattern.hasMatch(productId)) {
+      return productId;
+    }
+  }
+
+  final explicitBarcode = text(raw['barcode'], fallback: '').trim();
+  if (barcodePattern.hasMatch(explicitBarcode)) {
+    return explicitBarcode;
+  }
+
+  return null;
+}
+
 const visionNutritionConfidenceCutoff = 0.70;
 const _unknownVisionDishNames = {
   'unknown',
@@ -4499,6 +5169,19 @@ double? number(Object? value) {
   }
   if (value is String) {
     return double.tryParse(value);
+  }
+  return null;
+}
+
+int? _asInt(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  if (value is String) {
+    return int.tryParse(value);
   }
   return null;
 }

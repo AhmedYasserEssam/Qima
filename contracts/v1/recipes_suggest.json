@@ -86,6 +86,19 @@
             "minLength": 1
           }
         },
+        "inventory_item_ids": {
+          "type": "array",
+          "description": "Authenticated user inventory item IDs selected for recipe suggestion.",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "budget_level": {
+          "type": "string",
+          "enum": ["low", "mid", "high"],
+          "description": "Optional budget level used for budget-aware ranking."
+        },
         "dietary_filters": {
           "type": "array",
           "description": "Optional dietary filters used to exclude unsuitable recipe candidates.",
@@ -115,6 +128,9 @@
         },
         {
           "required": ["recognized_ingredients"]
+        },
+        {
+          "required": ["inventory_item_ids"]
         }
       ]
     },
@@ -323,7 +339,7 @@
           "body": {
             "error": {
               "code": "BAD_REQUEST",
-              "message": "Request must include pantry_items or recognized_ingredients.",
+              "message": "Request must include pantry_items, recognized_ingredients, or inventory_item_ids.",
               "retryable": false,
               "request_id": "req_40001"
             }
@@ -446,7 +462,7 @@
           "body": {
             "error": {
               "code": "BAD_REQUEST",
-              "message": "Request must include pantry_items or recognized_ingredients.",
+              "message": "Request must include pantry_items, recognized_ingredients, or inventory_item_ids.",
               "retryable": false,
               "request_id": "req_40011"
             }

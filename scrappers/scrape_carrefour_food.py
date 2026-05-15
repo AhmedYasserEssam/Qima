@@ -17,10 +17,12 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 from urllib.parse import urlencode, urljoin
 
+from dotenv import load_dotenv
 from scrapling.fetchers import Fetcher, FetcherSession
 from sqlalchemy import create_engine, text
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
 BASE_URL = "https://www.carrefouregypt.com"
 STORE_PREFIX = "/mafegy/en"
 
@@ -44,6 +46,9 @@ CSV_FIELDS = [
     "brand",
     "nutrition_basis",
     "serving_size",
+    "package_size_quantity",
+    "package_size_unit",
+    "package_size_raw",
     "energy_kcal",
     "protein_g",
     "carbohydrates_g",
@@ -76,7 +81,18 @@ DB_NUMERIC_FIELDS = {
     "sodium_mg",
     "salt_g",
     "price",
+    "package_size_quantity",
 }
+
+
+def load_environment() -> None:
+    root_env = REPO_ROOT / ".env"
+    backend_env = REPO_ROOT / "backend" / ".env"
+
+    if root_env.exists():
+        load_dotenv(root_env)
+    if backend_env.exists():
+        load_dotenv(backend_env)
 
 SCRIPT_RE = re.compile(r"<script[^>]*>(.*?)</script>", flags=re.IGNORECASE | re.DOTALL)
 NEXT_PUSH_RE = re.compile(
@@ -84,6 +100,11 @@ NEXT_PUSH_RE = re.compile(
 )
 BARCODE_RE = re.compile(r"^[0-9]{8,14}$")
 NUMBER_RE = re.compile(r"-?\d+(?:[.,]\d+)?")
+PACKAGE_SIZE_RE = re.compile(
+    r"(?P<qty>\d+(?:[.,]\d+)?)\s*"
+    r"(?P<unit>kg|kilogram|kilograms|g|gm|gram|grams|mg|ml|l|liter|liters|litre|litres|oz|ounce|ounces|lb|lbs|pound|pounds)\b",
+    re.IGNORECASE,
+)
 
 ALLERGEN_TERMS = {
     "celery",
@@ -120,6 +141,7 @@ class CategoryPage:
 
 @dataclass(frozen=True)
 class ProductDetails:
+    barcode: str = ""
     nutrition_basis: str = "per_serving"
     serving_size: str = ""
     energy_kcal: float | str = ""
@@ -132,6 +154,13 @@ class ProductDetails:
     salt_g: float | str = ""
     ingredients: str = "[]"
     allergens: str = "[]"
+
+
+@dataclass(frozen=True)
+class PackageSize:
+    quantity: float | str = ""
+    unit: str = ""
+    raw: str = ""
 
 
 def utc_now_iso() -> str:
@@ -164,6 +193,9 @@ def init_carrefour_table(database_url: str) -> None:
                     brand TEXT,
                     nutrition_basis TEXT,
                     serving_size TEXT,
+                    package_size_quantity DOUBLE PRECISION,
+                    package_size_unit TEXT,
+                    package_size_raw TEXT,
                     energy_kcal DOUBLE PRECISION,
                     protein_g DOUBLE PRECISION,
                     carbohydrates_g DOUBLE PRECISION,
@@ -184,6 +216,16 @@ def init_carrefour_table(database_url: str) -> None:
                     category_level_3 TEXT,
                     category_level_4 TEXT
                 );
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE carrefour_barcode_products
+                ADD COLUMN IF NOT EXISTS package_size_quantity DOUBLE PRECISION,
+                ADD COLUMN IF NOT EXISTS package_size_unit TEXT,
+                ADD COLUMN IF NOT EXISTS package_size_raw TEXT;
                 """
             )
         )
@@ -227,6 +269,9 @@ def upsert_rows_db(
             brand,
             nutrition_basis,
             serving_size,
+            package_size_quantity,
+            package_size_unit,
+            package_size_raw,
             energy_kcal,
             protein_g,
             carbohydrates_g,
@@ -254,6 +299,9 @@ def upsert_rows_db(
             :brand,
             :nutrition_basis,
             :serving_size,
+            :package_size_quantity,
+            :package_size_unit,
+            :package_size_raw,
             :energy_kcal,
             :protein_g,
             :carbohydrates_g,
@@ -281,6 +329,9 @@ def upsert_rows_db(
             brand = EXCLUDED.brand,
             nutrition_basis = EXCLUDED.nutrition_basis,
             serving_size = EXCLUDED.serving_size,
+            package_size_quantity = EXCLUDED.package_size_quantity,
+            package_size_unit = EXCLUDED.package_size_unit,
+            package_size_raw = EXCLUDED.package_size_raw,
             energy_kcal = EXCLUDED.energy_kcal,
             protein_g = EXCLUDED.protein_g,
             carbohydrates_g = EXCLUDED.carbohydrates_g,
@@ -418,11 +469,42 @@ def extract_json_key(stream: str, key: str, start: int = 0) -> tuple[Any, int]:
     return json.loads(stream[value_start:value_end]), value_end
 
 
+def extract_dict_key(stream: str, key: str, start: int = 0) -> tuple[dict[str, Any], int]:
+    search_from = start
+    while search_from < len(stream):
+        value, value_end = extract_json_key(stream, key, search_from)
+        if isinstance(value, dict):
+            return value, value_end
+        search_from = value_end
+
+    raise KeyError(f"Dict key not found in page stream: {key}")
+
+
 def extract_int_key(stream: str, key: str, start: int = 0) -> int | None:
     match = re.search(rf'"{re.escape(key)}":(\d+)', stream[start:])
     if not match:
         match = re.search(rf'"{re.escape(key)}":(\d+)', stream)
     return int(match.group(1)) if match else None
+
+
+def _optional_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def extract_product_barcode(stream: str) -> str:
+    product_barcode_patterns = [
+        r'"isMarketPlaceProduct":(?:true|false),"barcode":"(?P<barcode>[0-9]{8,14})"',
+        r'"barcode":"(?P<barcode>[0-9]{8,14})"',
+    ]
+    for pattern in product_barcode_patterns:
+        for match in re.finditer(pattern, stream):
+            barcode = match.group("barcode")
+            if BARCODE_RE.fullmatch(barcode):
+                return barcode
+    return ""
 
 
 def parse_category_page(
@@ -433,17 +515,41 @@ def parse_category_page(
     url: str,
 ) -> CategoryPage:
     stream = extract_next_stream(html)
-    products, products_end = extract_json_key(stream, "products")
+    products_end = 0
 
-    if not isinstance(products, list):
-        raise ValueError("The products payload was not a list")
+    try:
+        products, products_end = extract_json_key(stream, "products")
+        if not isinstance(products, list):
+            raise ValueError("The products payload was not a list")
+    except KeyError:
+        sections, products_end = extract_json_key(stream, "sections")
+        if not isinstance(sections, list):
+            raise ValueError("The sections payload was not a list")
+        products = [
+            product
+            for section in sections
+            if isinstance(section, dict)
+            for product in [product_from_section(section, category_name)]
+            if product is not None
+        ]
+
+    pagination = {}
+    try:
+        raw_pagination, _ = extract_json_key(stream, "pagination", products_end)
+        if isinstance(raw_pagination, dict):
+            pagination = raw_pagination
+    except KeyError:
+        pagination = {}
 
     return CategoryPage(
         category_id=category_id,
         category_name=category_name,
-        current_page=extract_int_key(stream, "currentPage", products_end) or page_index,
-        total_pages=extract_int_key(stream, "totalPages", products_end),
-        total_products=extract_int_key(stream, "totalProducts", products_end),
+        current_page=int(pagination.get("currentPage") or extract_int_key(stream, "currentPage", products_end) or page_index),
+        total_pages=_optional_int(pagination.get("totalPages")) or extract_int_key(stream, "totalPages", products_end),
+        total_products=(
+            _optional_int(pagination.get("totalResults"))
+            or extract_int_key(stream, "totalProducts", products_end)
+        ),
         products=products,
         url=url,
     )
@@ -460,6 +566,8 @@ def nested_get(data: dict[str, Any], path: Iterable[str], default: Any = None) -
 
 def product_url(product: dict[str, Any]) -> str:
     href = nested_get(product, ["links", "productUrl", "href"], "")
+    if not href:
+        href = product.get("productUrl") or ""
     return urljoin(BASE_URL, str(href)) if href else ""
 
 
@@ -476,6 +584,57 @@ def category_levels(product: dict[str, Any]) -> list[str]:
             if isinstance(category, dict) and category.get("name")
         ]
     return []
+
+
+def product_from_section(section: dict[str, Any], category_name: str) -> dict[str, Any] | None:
+    if section.get("uid") != "master-product-card":
+        return None
+
+    component = section.get("componentDTO")
+    if not isinstance(component, dict):
+        return None
+
+    attrs = component.get("additionalAttributes")
+    if not isinstance(attrs, dict):
+        return None
+
+    product_id = clean_text(attrs.get("productId"))
+    name = clean_text(attrs.get("productName"))
+    if not product_id or not name:
+        return None
+
+    analytics = component.get("analytics") if isinstance(component.get("analytics"), dict) else {}
+    brand = clean_brand_name(analytics.get("brandName") if analytics else "")
+    price = attrs.get("markedPrice")
+    selling_price = attrs.get("sellingPrice")
+    product_categories = attrs.get("productCategory")
+    if isinstance(product_categories, list) and product_categories:
+        levels = [clean_text(item) for item in product_categories if clean_text(item)]
+    else:
+        levels = [category_name]
+
+    href = attrs.get("productUrl") or nested_get(analytics, ["links", "productUrl", "href"], "")
+
+    return {
+        "id": product_id,
+        "ean": clean_text(attrs.get("barcode")),
+        "name": name,
+        "brand": {"name": brand},
+        "price": {
+            "price": price if price is not None else selling_price,
+            "discount": {"price": selling_price} if selling_price is not None else {},
+        },
+        "productCategoriesHearchi": "/".join(levels),
+        "links": {"productUrl": {"href": href}},
+        "productUrl": href,
+    }
+
+
+def clean_brand_name(value: Any) -> str:
+    text = clean_text(value)
+    if text.startswith("food_"):
+        text = text.removeprefix("food_")
+    return text.replace("_", " ").strip()
 
 
 def split_ingredients(text: str) -> list[str]:
@@ -619,6 +778,67 @@ def milligrams_value(value: Any) -> float | str:
     return number
 
 
+def parse_package_size_from_text(value: Any) -> PackageSize:
+    text = clean_text(value)
+    if not text:
+        return PackageSize()
+
+    matches = list(PACKAGE_SIZE_RE.finditer(text))
+    if not matches:
+        return PackageSize()
+
+    # Product names often include descriptive numbers before the package size.
+    # The last weight/volume token is usually the retail package amount.
+    match = matches[-1]
+    quantity = float(match.group("qty").replace(",", "."))
+    unit = match.group("unit").lower()
+    normalized = normalize_package_unit(quantity, unit)
+    if normalized is None:
+        return PackageSize()
+
+    normalized_quantity, normalized_unit = normalized
+    return PackageSize(
+        quantity=normalized_quantity,
+        unit=normalized_unit,
+        raw=clean_text(match.group(0)),
+    )
+
+
+def normalize_package_unit(quantity: float, unit: str) -> tuple[float, str] | None:
+    unit = unit.lower().strip()
+    if unit in {"mg", "milligram", "milligrams"}:
+        return round(quantity / 1000, 6), "g"
+    if unit in {"g", "gm", "gram", "grams"}:
+        return quantity, "g"
+    if unit in {"kg", "kilogram", "kilograms"}:
+        return quantity * 1000, "g"
+    if unit in {"ml"}:
+        return quantity, "ml"
+    if unit in {"l", "liter", "liters", "litre", "litres"}:
+        return quantity * 1000, "ml"
+    if unit in {"oz", "ounce", "ounces"}:
+        return quantity * 28.349523125, "g"
+    if unit in {"lb", "lbs", "pound", "pounds"}:
+        return quantity * 453.59237, "g"
+    return None
+
+
+def product_package_size(product: dict[str, Any]) -> PackageSize:
+    for key in (
+        "packageSize",
+        "packSize",
+        "netWeight",
+        "weight",
+        "volume",
+        "size",
+        "name",
+    ):
+        package_size = parse_package_size_from_text(product.get(key))
+        if package_size.quantity != "":
+            return package_size
+    return PackageSize()
+
+
 def nutrition_basis(serving_size: str, feature_keys: list[str]) -> str:
     serving_size_lower = serving_size.lower()
     if re.search(r"\b100\s*ml\b", serving_size_lower):
@@ -706,12 +926,18 @@ def flatten_nutrition_features(nutrition_facts: dict[str, Any]) -> list[dict[str
 def parse_product_details_html(html: str) -> ProductDetails:
     try:
         stream = extract_next_stream(html)
-        accordion, _ = extract_json_key(stream, "accordion")
     except Exception:
         return ProductDetails()
 
+    barcode = extract_product_barcode(stream)
+
+    try:
+        accordion, _ = extract_dict_key(stream, "accordion")
+    except Exception:
+        return ProductDetails(barcode=barcode)
+
     if not isinstance(accordion, dict):
-        return ProductDetails()
+        return ProductDetails(barcode=barcode)
 
     ingredient_text = clean_text(nested_get(accordion, ["ingredient", "ingredientText"], ""))
     info_map = nested_get(accordion, ["information", "infoMap"], {})
@@ -730,6 +956,7 @@ def parse_product_details_html(html: str) -> ProductDetails:
     )
 
     return ProductDetails(
+        barcode=barcode,
         nutrition_basis=nutrition.get("nutrition_basis", "per_serving"),
         serving_size=nutrition.get("serving_size", ""),
         energy_kcal=nutrition.get("energy_kcal", ""),
@@ -808,8 +1035,13 @@ def normalize_product(
     discount = price.get("discount") or {}
     brand = product.get("brand") or {}
     levels = category_levels(product)
-    barcode = str(product.get("ean") or "").strip()
     details = details or ProductDetails()
+    package_size = product_package_size(product)
+    source_product_id = clean_text(product.get("id") or product.get("productId"))
+    barcode = str(
+        product.get("ean") or product.get("barcode") or details.barcode or ""
+    ).strip()
+    product_identifier = barcode or source_product_id
 
     original_price = price.get("price")
     discount_price = discount.get("price")
@@ -817,11 +1049,14 @@ def normalize_product(
 
     row = {
         "barcode": barcode,
-        "product_id": f"carrefour:{barcode}",
+        "product_id": f"carrefour:{product_identifier}",
         "name": product.get("name", ""),
         "brand": brand.get("name", "") if isinstance(brand, dict) else "",
         "nutrition_basis": details.nutrition_basis,
         "serving_size": details.serving_size,
+        "package_size_quantity": package_size.quantity,
+        "package_size_unit": package_size.unit,
+        "package_size_raw": package_size.raw,
         "energy_kcal": details.energy_kcal,
         "protein_g": details.protein_g,
         "carbohydrates_g": details.carbohydrates_g,
@@ -833,7 +1068,7 @@ def normalize_product(
         "ingredients": details.ingredients,
         "allergens": details.allergens,
         "source_provider": "carrefour_egypt",
-        "source_provider_product_id": barcode,
+        "source_provider_product_id": source_product_id or barcode,
         "source_fetched_at": scraped_at,
         "data_quality_completeness": data_completeness(details),
         "price": current_price,
@@ -947,8 +1182,13 @@ def scrape_products(args: argparse.Namespace) -> Iterator[dict[str, Any]]:
 
                 valid_products = []
                 for product in page.products:
-                    barcode = str(product.get("ean") or "").strip()
-                    if not args.include_invalid_barcodes and not BARCODE_RE.fullmatch(barcode):
+                    barcode = str(product.get("ean") or product.get("barcode") or "").strip()
+                    can_fetch_barcode = args.fetch_details and bool(product_url(product))
+                    if (
+                        not args.include_invalid_barcodes
+                        and not BARCODE_RE.fullmatch(barcode)
+                        and not can_fetch_barcode
+                    ):
                         logging.debug(
                             "Skipping product %s with invalid barcode %r",
                             product.get("id", ""),
@@ -978,12 +1218,23 @@ def scrape_products(args: argparse.Namespace) -> Iterator[dict[str, Any]]:
 
                 for product in valid_products:
                     detail_key = str(product.get("id") or product.get("ean") or "")
-                    yield normalize_product(
+                    row = normalize_product(
                         product,
                         page,
                         scraped_at,
                         details_by_product_id.get(detail_key),
                     )
+                    if (
+                        not args.include_invalid_barcodes
+                        and not BARCODE_RE.fullmatch(str(row.get("barcode") or ""))
+                    ):
+                        logging.debug(
+                            "Skipping product %s because detail page did not expose a valid barcode",
+                            product.get("id", ""),
+                        )
+                        continue
+
+                    yield row
                     emitted += 1
                     if args.max_products and emitted >= args.max_products:
                         return
@@ -1143,6 +1394,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    load_environment()
     parser = build_parser()
     args = parser.parse_args(argv)
 
