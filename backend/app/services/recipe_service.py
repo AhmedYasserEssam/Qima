@@ -17,17 +17,17 @@ from app.schemas.v1.recipes import (
     SafetyFlags,
 )
 from app.services.exceptions import NotFoundError, UpstreamUnavailableError
+from app.services.recipe_matching_service import recipe_matching_service
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_ALLRECIPES_JSONL = REPO_ROOT / "data" / "Recipes" / "allrecipes_recipes.jsonl"
 
 
 @dataclass(frozen=True)
-class _ScoredRecipe:
-    row: dict[str, Any]
-    score: float
-    matched_requested_display: list[str]
-    missing_recipe_ingredients: list[str]
+class RecipeSuggestResult:
+    recipes: list[RecipeCandidate]
+    warnings: list[str]
+    debug: dict[str, Any] | None = None
 
 
 class RecipeService:
@@ -47,110 +47,48 @@ class RecipeService:
         dietary_filters: list[str],
         excluded_ingredients: list[str],
         max_results: int | None,
-    ) -> list[RecipeCandidate]:
+    ) -> RecipeSuggestResult:
         self._ensure_initialized()
-        requested_pairs = self._prepare_requested_ingredients(requested_ingredients)
-        if not requested_pairs:
-            raise NotFoundError("No valid ingredients were provided for recipe matching.")
-
-        candidate_rows = self._query_candidate_rows(
-            [normalized for _, normalized in requested_pairs],
+        matching_result = recipe_matching_service.match_and_rank(
+            requested_ingredients=requested_ingredients,
+            dietary_filters=dietary_filters,
+            excluded_ingredients=excluded_ingredients,
             max_results=max_results,
         )
-        if not candidate_rows:
-            raise UpstreamUnavailableError(
-                "Recipe dataset is unavailable or empty. Seed allrecipes_recipes first."
-            )
-
-        excluded_normalized = [
-            normalized
-            for normalized in (normalize_name(item) for item in excluded_ingredients)
-            if normalized
-        ]
-        dietary_normalized = [item.strip().lower() for item in dietary_filters if item.strip()]
-
-        scored: list[_ScoredRecipe] = []
-        requested_norm_to_display = {
-            normalized: display for display, normalized in requested_pairs
-        }
-
-        for row in candidate_rows:
-            ingredient_names = self._recipe_ingredient_names(row)
-            if not ingredient_names:
-                continue
-
-            ingredient_norm_set = {normalized for _, normalized in ingredient_names}
-            matched_norm = [
-                normalized
-                for normalized in requested_norm_to_display.keys()
-                if normalized in ingredient_norm_set
-            ]
-            if not matched_norm:
-                continue
-
-            if self._has_excluded_ingredient(ingredient_norm_set, excluded_normalized):
-                continue
-            if not self._passes_dietary_filters(row, dietary_normalized):
-                continue
-
-            matched_display = [requested_norm_to_display[norm] for norm in matched_norm]
-            missing_recipe = [
-                display
-                for display, normalized in ingredient_names
-                if normalized not in matched_norm
-            ][:8]
-            score = self._score_match(
-                overlap=len(matched_norm),
-                requested_count=len(requested_norm_to_display),
-                recipe_ingredient_count=len(ingredient_norm_set),
-                rating=_to_float(row.get("rating")),
-                review_count=_to_float(row.get("review_count")),
-            )
-            scored.append(
-                _ScoredRecipe(
-                    row=row,
-                    score=score,
-                    matched_requested_display=matched_display,
-                    missing_recipe_ingredients=missing_recipe,
-                )
-            )
-
-        if not scored:
-            raise NotFoundError(
-                "No matching recipe suggestions were found for the supplied ingredients."
-            )
-
-        scored.sort(
-            key=lambda item: (
-                item.score,
-                _to_float(item.row.get("rating")) or 0.0,
-                _to_float(item.row.get("review_count")) or 0.0,
-            ),
-            reverse=True,
-        )
-
-        limit = max_results or 5
         recipes: list[RecipeCandidate] = []
-        for item in scored[:limit]:
-            recipe_id = self._public_recipe_id(item.row)
+        for scored_recipe in matching_result.scored_recipes:
+            row = scored_recipe.recipe.row
+            recipe_id = self._public_recipe_id(row)
+            candidate_warnings = list(dict.fromkeys(scored_recipe.warnings))
             recipes.append(
                 RecipeCandidate(
                     recipe_id=recipe_id,
-                    title=str(item.row.get("title") or "Untitled recipe"),
-                    match_score=item.score,
-                    matched_ingredients=item.matched_requested_display,
-                    missing_ingredients=item.missing_recipe_ingredients,
+                    title=str(row.get("title") or "Untitled recipe"),
+                    match_score=scored_recipe.score,
+                    matched_ingredients=scored_recipe.matched_input_ingredients,
+                    missing_ingredients=scored_recipe.missing_recipe_ingredients,
+                    missing_input_ingredients=scored_recipe.missing_input_ingredients,
+                    recipe_ingredients_used_for_matching=scored_recipe.matched_recipe_ingredients,
                     exclusions=[],
-                    warnings=[],
+                    warnings=candidate_warnings,
+                    source={
+                        "source": str(row.get("source") or ""),
+                        "source_url": str(row.get("source_url") or ""),
+                        "source_type": "recipe_corpus",
+                    },
                     grounding_metadata=GroundingMetadata(
                         retrieved_from="recipe_corpus_primary",
-                        matched_count=len(item.matched_requested_display),
-                        missing_count=len(item.missing_recipe_ingredients),
+                        matched_count=len(scored_recipe.matched_input_ingredients),
+                        missing_count=len(scored_recipe.missing_recipe_ingredients),
                     ),
                 )
             )
 
-        return recipes
+        return RecipeSuggestResult(
+            recipes=recipes,
+            warnings=matching_result.warnings,
+            debug=matching_result.debug,
+        )
 
     def discuss_recipe(
         self,

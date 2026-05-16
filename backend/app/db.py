@@ -4,6 +4,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -37,8 +38,54 @@ elif DATABASE_URL.startswith("postgresql+psycopg://") and find_spec("psycopg") i
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
+RECIPE_EMBEDDING_DIMENSION = 384
+
+
+def _try_init_pgvector_extension() -> bool:
+    try:
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+        return True
+    except SQLAlchemyError:
+        return False
+
+
+def _create_recipe_embedding_schema(conn) -> None:
+    conn.execute(
+        text(
+            f"""
+            CREATE TABLE IF NOT EXISTS recipe_ingredient_embeddings (
+                canonical_name TEXT PRIMARY KEY,
+                display_name TEXT NOT NULL,
+                frequency INTEGER NOT NULL,
+                model_name TEXT NOT NULL,
+                embedding vector({RECIPE_EMBEDDING_DIMENSION}) NOT NULL,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_recipe_ingredient_embeddings_model_name
+            ON recipe_ingredient_embeddings(model_name);
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_recipe_ingredient_embeddings_hnsw
+            ON recipe_ingredient_embeddings
+            USING hnsw (embedding vector_cosine_ops);
+            """
+        )
+    )
+
 
 def init_db() -> None:
+    pgvector_enabled = _try_init_pgvector_extension()
     with engine.begin() as conn:
         conn.execute(
             text(
@@ -217,6 +264,7 @@ def init_db() -> None:
                     dietary_flags JSONB NOT NULL DEFAULT '{}'::jsonb,
                     allergen_flags JSONB NOT NULL DEFAULT '[]'::jsonb,
                     possible_allergen_flags JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    packaged_ingredient_warnings JSONB NOT NULL DEFAULT '[]'::jsonb,
                     allergen_basis JSONB NOT NULL DEFAULT '{}'::jsonb,
                     allergen_confidence JSONB NOT NULL DEFAULT '{}'::jsonb,
                     difficulty TEXT,
@@ -266,6 +314,14 @@ def init_db() -> None:
                 """
                 ALTER TABLE allrecipes_recipes
                 ADD COLUMN IF NOT EXISTS possible_allergen_flags JSONB NOT NULL DEFAULT '[]'::jsonb;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE allrecipes_recipes
+                ADD COLUMN IF NOT EXISTS packaged_ingredient_warnings JSONB NOT NULL DEFAULT '[]'::jsonb;
                 """
             )
         )
@@ -325,6 +381,8 @@ def init_db() -> None:
                 """
             )
         )
+        if pgvector_enabled:
+            _create_recipe_embedding_schema(conn)
         conn.execute(
             text(
                 """

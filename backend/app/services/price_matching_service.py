@@ -334,6 +334,10 @@ class PriceMatchingService:
         ingredient: NormalizedIngredient,
         item: PriceCatalogItem,
     ) -> float:
+        if "powder" in ingredient.form_tags and "powder" not in item.form_tags:
+            if item.form_tags:
+                return 0.0
+            return 0.1
         if not ingredient.form_tags:
             if item.form_tags & {"processed", "flavored", "stock", "dessert"}:
                 return 0.25

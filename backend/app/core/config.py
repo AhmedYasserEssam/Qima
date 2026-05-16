@@ -58,6 +58,10 @@ class Settings(BaseSettings):
         default=18_000_000,
         alias="GEMINI_INLINE_IMAGE_MAX_BYTES",
     )
+    qima_recipe_debug_enabled: bool = Field(
+        default=False,
+        alias="QIMA_RECIPE_DEBUG_ENABLED",
+    )
 
 
 @lru_cache(maxsize=1)

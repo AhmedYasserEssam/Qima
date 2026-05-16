@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.deps.auth import get_optional_current_user
+from app.core.config import get_settings
 from app.models.user import User
 from app.schemas.v1.recipes import (
     RecipeCandidate,
@@ -21,9 +22,14 @@ from app.services.recipe_service import recipe_service
 router = APIRouter()
 
 
-@router.post("/suggest", response_model=RecipeSuggestResponse)
+@router.post(
+    "/suggest",
+    response_model=RecipeSuggestResponse,
+    response_model_exclude_none=True,
+)
 async def suggest_recipes(
     payload: RecipeSuggestRequest,
+    debug: bool = Query(default=False),
     current_user: User | None = Depends(get_optional_current_user),
 ) -> RecipeSuggestResponse:
     merged_ingredients = _merge_ingredients(
@@ -57,7 +63,7 @@ async def suggest_recipes(
         dietary_filters.append("budget_friendly")
 
     try:
-        recipes = recipe_service.suggest_recipes(
+        suggestion = recipe_service.suggest_recipes(
             requested_ingredients=merged_ingredients,
             dietary_filters=dietary_filters,
             excluded_ingredients=payload.excluded_ingredients,
@@ -74,19 +80,24 @@ async def suggest_recipes(
             detail=str(exc),
         ) from exc
 
-    for candidate in recipes:
+    for candidate in suggestion.recipes:
         candidate.exclusions = list(
             dict.fromkeys(dietary_filters + payload.excluded_ingredients)
         )
 
+    settings = get_settings()
+    include_debug = settings.qima_recipe_debug_enabled and debug
+
     return RecipeSuggestResponse(
-        recipes=recipes,
+        recipes=suggestion.recipes,
         source=RecipeSource(
             dataset="recipe_corpus_primary",
             retrieval_mode="retrieval_first",
             source_type="recipe_corpus",
         ),
         latency_ms=120,
+        warnings=suggestion.warnings or None,
+        debug=suggestion.debug if include_debug else None,
     )
 
 
