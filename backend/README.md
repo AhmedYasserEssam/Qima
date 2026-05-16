@@ -78,6 +78,22 @@ Optional explicit DB URL:
 py -3 ..\scrappers\scrape_carrefour_food.py --sink db --database-url "postgresql://qima_user:qima_password@localhost:15432/qima"
 ```
 
+## Seed Recipe Embeddings
+
+The recipe suggestion pipeline can use precomputed pgvector embeddings for semantic
+ingredient retrieval. Start the Docker database with the pgvector image, seed
+Allrecipes, then run:
+
+```powershell
+py -3 scripts\seed_recipe_ingredient_embeddings.py
+```
+
+Preview without writing:
+
+```powershell
+py -3 scripts\seed_recipe_ingredient_embeddings.py --dry-run
+```
+
 ## Run tests
 
 ### Windows PowerShell

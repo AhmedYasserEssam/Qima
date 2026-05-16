@@ -22,10 +22,17 @@ void main() {
   );
 }
 
-const apiBaseUrl = String.fromEnvironment(
-  'QIMA_API_BASE_URL',
-  defaultValue: 'http://127.0.0.1:8000',
-);
+const _configuredApiBaseUrl = String.fromEnvironment('QIMA_API_BASE_URL');
+
+String get apiBaseUrl {
+  if (_configuredApiBaseUrl.isNotEmpty) {
+    return _configuredApiBaseUrl;
+  }
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    return 'http://10.0.2.2:8000';
+  }
+  return 'http://127.0.0.1:8000';
+}
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient(
@@ -978,6 +985,7 @@ class ApiClient {
   });
 
   static const requestTimeout = Duration(seconds: 12);
+  static const recipeTimeout = Duration(seconds: 60);
   static const uploadTimeout = Duration(seconds: 45);
 
   final String baseUrl;
@@ -1010,7 +1018,7 @@ class ApiClient {
     } on ApiFailure {
       rethrow;
     } on TimeoutException {
-      throw ApiFailure.network('Request timed out after $requestTimeout.');
+      throw ApiFailure.timeout(requestTimeout);
     } on Exception catch (error) {
       throw ApiFailure.network(error.toString());
     }
@@ -1020,18 +1028,19 @@ class ApiClient {
     String path,
     Map<String, Object?> body, {
     required List<String> requiredFields,
+    Duration timeout = requestTimeout,
   }) async {
     try {
       final response = await client.post(
         _uri(path),
         headers: _headers(includeJsonContentType: true),
         body: jsonEncode(body),
-      ).timeout(requestTimeout);
+      ).timeout(timeout);
       return _parseResponse(response, requiredFields);
     } on ApiFailure {
       rethrow;
     } on TimeoutException {
-      throw ApiFailure.network('Request timed out after $requestTimeout.');
+      throw ApiFailure.timeout(timeout);
     } on Exception catch (error) {
       throw ApiFailure.network(error.toString());
     }
@@ -1049,7 +1058,7 @@ class ApiClient {
     } on ApiFailure {
       rethrow;
     } on TimeoutException {
-      throw ApiFailure.network('Request timed out after $requestTimeout.');
+      throw ApiFailure.timeout(requestTimeout);
     } on Exception catch (error) {
       throw ApiFailure.network(error.toString());
     }
@@ -1078,7 +1087,7 @@ class ApiClient {
     } on ApiFailure {
       rethrow;
     } on TimeoutException {
-      throw ApiFailure.network('Upload timed out after $uploadTimeout.');
+      throw ApiFailure.timeout(uploadTimeout);
     } on Exception catch (error) {
       throw ApiFailure.network(error.toString());
     }
@@ -1153,6 +1162,16 @@ class ApiFailure implements Exception {
     );
   }
 
+  factory ApiFailure.timeout(Duration timeout) {
+    return ApiFailure(
+      message:
+          'The FastAPI backend took too long to respond. It may still be warming up.',
+      retryable: true,
+      code: 'TIMEOUT',
+      details: 'Request timed out after $timeout.',
+    );
+  }
+
   factory ApiFailure.fromResponse(int statusCode, Map<String, Object?> raw) {
     final error = raw['error'];
     if (error is Map) {
@@ -1220,15 +1239,19 @@ List<String> detectPartialReasons(Map<String, Object?> raw) {
     reasons.add('Confidence is low.');
   }
   final missing = raw['missing_ingredients'];
-  if (missing is List && missing.isNotEmpty) {
+  final missingInput = raw['missing_input_ingredients'];
+  if ((missing is List && missing.isNotEmpty) ||
+      (missingInput is List && missingInput.isNotEmpty)) {
     reasons.add('Some ingredients are missing.');
   }
   final recipes = raw['recipes'];
   if (recipes is List) {
     for (final recipe in recipes) {
       if (recipe is Map &&
-          recipe['missing_ingredients'] is List &&
-          (recipe['missing_ingredients'] as List).isNotEmpty) {
+          ((recipe['missing_ingredients'] is List &&
+                  (recipe['missing_ingredients'] as List).isNotEmpty) ||
+              (recipe['missing_input_ingredients'] is List &&
+                  (recipe['missing_input_ingredients'] as List).isNotEmpty))) {
         reasons.add('Recipe suggestions include missing ingredients.');
         break;
       }
@@ -1315,6 +1338,9 @@ final inventoryControllerProvider =
     StateNotifierProvider<InventoryController, AsyncValue<List<InventoryItemRecord>>>(
       (ref) => InventoryController(ref.read(apiClientProvider)),
     );
+final selectedVisionIngredientsProvider = StateProvider<List<String>>(
+  (ref) => const <String>[],
+);
 
 
 class InventoryController extends StateNotifier<AsyncValue<List<InventoryItemRecord>>> {
@@ -1553,6 +1579,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
             onEstimateNutritionFromVision: _estimateNutritionFromVision,
             onAddBarcodeToInventory: _addBarcodeScanToInventory,
             onAddInventoryFromVision: _addVisionIngredientsToInventory,
+            onVisionSelectionChanged: _setVisionSelectionForRecipes,
           ),
         ),
         AsyncPayloadView(
@@ -1698,6 +1725,24 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     }
   }
 
+  void _setVisionSelectionForRecipes(List<String> selectedIngredients) {
+    final deduped = <String>[];
+    final seen = <String>{};
+    for (final ingredient in selectedIngredients) {
+      final cleaned = ingredient.trim();
+      if (cleaned.isEmpty) {
+        continue;
+      }
+      final key = cleaned.toLowerCase();
+      if (seen.contains(key)) {
+        continue;
+      }
+      seen.add(key);
+      deduped.add(cleaned);
+    }
+    ref.read(selectedVisionIngredientsProvider.notifier).state = deduped;
+  }
+
   void _scrollToScanResult() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
@@ -1809,6 +1854,14 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
     final inventoryItems = inventoryState.valueOrNull ?? const <InventoryItemRecord>[];
     final inventoryLoading = inventoryState.isLoading;
     final inventoryError = inventoryState.error;
+    final selectedVisionIngredients = ref.watch(selectedVisionIngredientsProvider);
+    final selectedImageInventoryIngredients = _selectedImageInventoryIngredients(
+      inventoryItems,
+    );
+    final effectiveImageIngredients = _mergeImageIngredients(
+      selectedVisionIngredients,
+      selectedImageInventoryIngredients,
+    );
 
     return EndpointPage(
       title: 'Recipes',
@@ -1945,6 +1998,55 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
                   setState(() => budgetLevel = value);
                 },
               ),
+              const SizedBox(height: 8),
+              if (effectiveImageIngredients.isEmpty)
+                Text(
+                  'No selected image ingredients yet.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                )
+              else
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Using ${effectiveImageIngredients.length} selected image ingredient(s).',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final item in effectiveImageIngredients)
+                          InputChip(
+                            label: Text(item),
+                            onDeleted: selectedVisionIngredients.contains(item)
+                                ? () {
+                                    final next = List<String>.from(selectedVisionIngredients)
+                                      ..remove(item);
+                                    ref.read(selectedVisionIngredientsProvider.notifier).state =
+                                        next;
+                                  }
+                                : null,
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              if (selectedVisionIngredients.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      ref.read(selectedVisionIngredientsProvider.notifier).state =
+                          const <String>[];
+                    },
+                    icon: const Icon(Icons.clear_all_outlined),
+                    label: const Text('Clear image ingredients'),
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               FilledButton.icon(
                 onPressed: _suggest,
@@ -2094,11 +2196,18 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
     final selectedInventoryIds = selectedInventoryItemIds
         .where((id) => availableIds.contains(id))
         .toList();
+    final recognizedIngredients = _mergeImageIngredients(
+      ref.read(selectedVisionIngredientsProvider),
+      _selectedImageInventoryIngredients(availableItems),
+    );
 
-    if (pantryItems.isEmpty && selectedInventoryIds.isEmpty) {
+    if (
+        pantryItems.isEmpty &&
+        selectedInventoryIds.isEmpty &&
+        recognizedIngredients.isEmpty) {
       showValidation(
         context,
-        'Select inventory items or enter pantry items before suggesting recipes.',
+        'Select inventory items, image ingredients, or enter pantry items before suggesting recipes.',
       );
       return;
     }
@@ -2107,17 +2216,70 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
       budgetLevel: budgetLevel,
       inventoryItemIds: selectedInventoryIds,
       pantryItems: pantryItems,
+      recognizedIngredients: recognizedIngredients,
     );
+    final includeDebug = ref.read(debugModeProvider);
+    final suggestPath = includeDebug
+        ? '/v1/recipes/suggest?debug=true'
+        : '/v1/recipes/suggest';
 
     ref
         .read(recipeControllerProvider.notifier)
         .run(
           (client) => client.post(
-            '/v1/recipes/suggest',
+            suggestPath,
             body,
-            requiredFields: ['recipes', 'source'],
+            requiredFields: ['recipes'],
+            timeout: ApiClient.recipeTimeout,
           ),
         );
+  }
+
+  List<String> _selectedImageInventoryIngredients(
+    List<InventoryItemRecord> inventoryItems,
+  ) {
+    final selectedNames = <String>[];
+    final seen = <String>{};
+    for (final item in inventoryItems) {
+      if (!selectedInventoryItemIds.contains(item.id)) {
+        continue;
+      }
+      if (item.sourceMethod.toLowerCase() != 'image') {
+        continue;
+      }
+      final cleaned = item.name.trim();
+      if (cleaned.isEmpty) {
+        continue;
+      }
+      final key = cleaned.toLowerCase();
+      if (seen.contains(key)) {
+        continue;
+      }
+      seen.add(key);
+      selectedNames.add(cleaned);
+    }
+    return selectedNames;
+  }
+
+  List<String> _mergeImageIngredients(
+    List<String> recognizedIngredients,
+    List<String> imageInventoryIngredients,
+  ) {
+    final merged = <String>[];
+    final seen = <String>{};
+    for (final item in [...recognizedIngredients, ...imageInventoryIngredients]) {
+      final cleaned = item.trim();
+      if (cleaned.isEmpty) {
+        continue;
+      }
+      final key = cleaned.toLowerCase();
+      if (seen.contains(key)) {
+        continue;
+      }
+      seen.add(key);
+      merged.add(cleaned);
+    }
+    return merged;
   }
 
   void _discuss() {
@@ -3188,6 +3350,7 @@ class AsyncPayloadView extends ConsumerWidget {
     this.onEstimateNutritionFromVision,
     this.onAddBarcodeToInventory,
     this.onAddInventoryFromVision,
+    this.onVisionSelectionChanged,
   });
 
   final String title;
@@ -3196,6 +3359,7 @@ class AsyncPayloadView extends ConsumerWidget {
   final ValueChanged<Map<String, Object?>>? onEstimateNutritionFromVision;
   final Future<void> Function(Map<String, Object?> raw)? onAddBarcodeToInventory;
   final Future<void> Function(InventoryImageSelection selection)? onAddInventoryFromVision;
+  final ValueChanged<List<String>>? onVisionSelectionChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -3210,6 +3374,7 @@ class AsyncPayloadView extends ConsumerWidget {
         onEstimateNutritionFromVision: onEstimateNutritionFromVision,
         onAddBarcodeToInventory: onAddBarcodeToInventory,
         onAddInventoryFromVision: onAddInventoryFromVision,
+        onVisionSelectionChanged: onVisionSelectionChanged,
       ),
       error: (error, stackTrace) {
         final failure = error is ApiFailure
@@ -3312,6 +3477,7 @@ class PayloadCard extends ConsumerWidget {
     this.onEstimateNutritionFromVision,
     this.onAddBarcodeToInventory,
     this.onAddInventoryFromVision,
+    this.onVisionSelectionChanged,
   });
 
   final String title;
@@ -3319,6 +3485,7 @@ class PayloadCard extends ConsumerWidget {
   final ValueChanged<Map<String, Object?>>? onEstimateNutritionFromVision;
   final Future<void> Function(Map<String, Object?> raw)? onAddBarcodeToInventory;
   final Future<void> Function(InventoryImageSelection selection)? onAddInventoryFromVision;
+  final ValueChanged<List<String>>? onVisionSelectionChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -3358,6 +3525,7 @@ class PayloadCard extends ConsumerWidget {
                 raw: raw,
                 onEstimateNutrition: onEstimateNutritionFromVision,
                 onAddToInventory: onAddInventoryFromVision,
+                onSelectionChanged: onVisionSelectionChanged,
               )
             else if (isNutritionEstimate)
               NutritionEstimateResultView(raw: raw)
@@ -3552,11 +3720,13 @@ class VisionIdentifyResultView extends StatefulWidget {
     required this.raw,
     this.onEstimateNutrition,
     this.onAddToInventory,
+    this.onSelectionChanged,
   });
 
   final Map<String, Object?> raw;
   final ValueChanged<Map<String, Object?>>? onEstimateNutrition;
   final Future<void> Function(InventoryImageSelection selection)? onAddToInventory;
+  final ValueChanged<List<String>>? onSelectionChanged;
 
   @override
   State<VisionIdentifyResultView> createState() => _VisionIdentifyResultViewState();
@@ -3588,6 +3758,7 @@ class _VisionIdentifyResultViewState extends State<VisionIdentifyResultView> {
       for (final name in recognized)
         _normalizedVisionName(name),
     };
+    _notifySelectionChanged();
   }
 
   List<String> _recognizedIngredientNames() {
@@ -3607,6 +3778,20 @@ class _VisionIdentifyResultViewState extends State<VisionIdentifyResultView> {
       names.add(cleaned);
     }
     return names;
+  }
+
+  List<String> _selectedIngredientNames() {
+    final selected = <String>[];
+    for (final ingredient in _recognizedIngredientNames()) {
+      if (_selectedIngredientKeys.contains(_normalizedVisionName(ingredient))) {
+        selected.add(ingredient);
+      }
+    }
+    return selected;
+  }
+
+  void _notifySelectionChanged() {
+    widget.onSelectionChanged?.call(_selectedIngredientNames());
   }
 
   @override
@@ -3715,6 +3900,7 @@ class _VisionIdentifyResultViewState extends State<VisionIdentifyResultView> {
                         _selectedIngredientKeys.remove(key);
                       }
                     });
+                    _notifySelectionChanged();
                   },
                 ),
             ],
@@ -4486,6 +4672,7 @@ Map<String, Object?> buildRecipeSuggestRequestBody({
   required String budgetLevel,
   required List<int> inventoryItemIds,
   required List<String> pantryItems,
+  List<String> recognizedIngredients = const [],
   List<String> dietaryFilters = const [],
   List<String> excludedIngredients = const [],
   int? maxResults,
@@ -4515,12 +4702,29 @@ Map<String, Object?> buildRecipeSuggestRequestBody({
     dedupedInventoryIds.add(id);
   }
 
+  final dedupedRecognizedIngredients = <String>[];
+  final seenRecognized = <String>{};
+  for (final item in recognizedIngredients) {
+    final cleaned = item.trim();
+    if (cleaned.isEmpty) {
+      continue;
+    }
+    final key = cleaned.toLowerCase();
+    if (seenRecognized.contains(key)) {
+      continue;
+    }
+    seenRecognized.add(key);
+    dedupedRecognizedIngredients.add(cleaned);
+  }
+
   final normalizedBudget = ['low', 'mid', 'high'].contains(budgetLevel)
       ? budgetLevel
       : 'mid';
 
   return {
     if (dedupedPantryItems.isNotEmpty) 'pantry_items': dedupedPantryItems,
+    if (dedupedRecognizedIngredients.isNotEmpty)
+      'recognized_ingredients': dedupedRecognizedIngredients,
     if (dedupedInventoryIds.isNotEmpty) 'inventory_item_ids': dedupedInventoryIds,
     if (dietaryFilters.isNotEmpty) 'dietary_filters': dietaryFilters,
     if (excludedIngredients.isNotEmpty)

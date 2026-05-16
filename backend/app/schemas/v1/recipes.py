@@ -1,4 +1,4 @@
-from typing import Annotated, Literal
+from typing import Any, Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -44,10 +44,13 @@ class RecipeCandidate(BaseModel):
     recipe_id: str = Field(..., min_length=1)
     title: str = Field(..., min_length=1)
     match_score: float = Field(..., ge=0, le=1)
-    matched_ingredients: list[str] = Field(default_factory=list)
+    matched_ingredients: list[str] | None = None
     missing_ingredients: list[str] = Field(default_factory=list)
+    missing_input_ingredients: list[str] | None = None
+    recipe_ingredients_used_for_matching: list[str] | None = None
     exclusions: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    source: dict[str, Any] | None = None
     grounding_metadata: GroundingMetadata
 
 
@@ -62,9 +65,11 @@ class RecipeSource(BaseModel):
 class RecipeSuggestResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    recipes: list[RecipeCandidate] = Field(..., min_length=1)
+    recipes: list[RecipeCandidate]
     source: RecipeSource
     latency_ms: int = Field(..., ge=0)
+    warnings: list[str] | None = None
+    debug: dict[str, Any] | None = None
 
 
 class CandidateContext(BaseModel):
