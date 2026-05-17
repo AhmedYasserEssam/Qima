@@ -101,6 +101,9 @@ Example:
 DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/qima
 GROQ_API_KEY=your_groq_key_here
 GEMINI_API_KEY=your_gemini_key_here
+OPENAI_API_KEY=your_openai_key_here
+OPENAI_RECIPE_DISCUSS_MODEL=gpt-5.4-mini
+OPENAI_REQUEST_TIMEOUT_SECONDS=20
 APP_ENV=development
 APP_DEBUG=true
 APP_NAME=Qima API
