@@ -12,6 +12,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_preview/device_preview.dart';
 import 'package:flutter/foundation.dart';
+import 'package:mobile/features/labs/data/lab_report_api_client.dart';
+import 'package:mobile/features/labs/screens/lab_report_extract_test_screen.dart';
 
 void main() {
   runApp(
@@ -112,12 +114,7 @@ class AuthTokenStore {
   }
 }
 
-enum AuthStage {
-  booting,
-  loggedOut,
-  needsProfile,
-  ready,
-}
+enum AuthStage { booting, loggedOut, needsProfile, ready }
 
 Future<void> persistAuthToken(String? token) async {
   await const AuthTokenStore().writeToken(token);
@@ -132,7 +129,9 @@ Future<void> resolveAuthStage(WidgetRef ref) async {
   }
 
   try {
-    await ref.read(apiClientProvider).get('/v1/profile/me', requiredFields: ['user_id']);
+    await ref
+        .read(apiClientProvider)
+        .get('/v1/profile/me', requiredFields: ['user_id']);
     ref.read(authStageProvider.notifier).state = AuthStage.ready;
   } on ApiFailure catch (error) {
     if (error.statusCode == 404) {
@@ -188,10 +187,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/splash',
         builder: (context, state) => const AuthSplashScreen(),
       ),
-      GoRoute(
-        path: '/login',
-        builder: (context, state) => const LoginScreen(),
-      ),
+      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/signup',
         builder: (context, state) => const SignUpScreen(),
@@ -232,6 +228,16 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const DebugScreen(),
           ),
           GoRoute(
+            path: '/labs/extract-report-test',
+            builder: (context, state) => LabReportExtractTestScreen(
+              baseUrl: apiBaseUrl,
+              apiClient: LabReportApiClient(
+                baseUrl: apiBaseUrl,
+                authTokenReader: () => ref.read(authTokenProvider),
+              ),
+            ),
+          ),
+          GoRoute(
             path: '/barcode-scanner',
             builder: (context, state) => const BarcodeScannerScreen(),
           ),
@@ -258,7 +264,8 @@ class _QimaAppState extends ConsumerState<QimaApp> {
   Future<void> _loadLocalState() async {
     final prefs = await SharedPreferences.getInstance();
     ref.read(profileIdProvider.notifier).state = prefs.getString('profile_id');
-    ref.read(authTokenProvider.notifier).state = await const AuthTokenStore().readToken();
+    ref.read(authTokenProvider.notifier).state = await const AuthTokenStore()
+        .readToken();
     await resolveAuthStage(ref);
     ref.read(authBootstrappedProvider.notifier).state = true;
   }
@@ -290,9 +297,7 @@ class AuthSplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
 
@@ -348,7 +353,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       TextFormField(
                         controller: passwordController,
                         obscureText: true,
-                        decoration: const InputDecoration(labelText: 'Password'),
+                        decoration: const InputDecoration(
+                          labelText: 'Password',
+                        ),
                       ),
                       const SizedBox(height: 12),
                       FilledButton.icon(
@@ -416,11 +423,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
 
     try {
-      final payload = await ref.read(apiClientProvider).post(
-        '/v1/auth/login',
-        {'email': email, 'password': password},
-        requiredFields: ['message', 'access_token', 'token_type', 'user'],
-      );
+      final payload = await ref
+          .read(apiClientProvider)
+          .post(
+            '/v1/auth/login',
+            {'email': email, 'password': password},
+            requiredFields: ['message', 'access_token', 'token_type', 'user'],
+          );
       final token = text(payload.raw['access_token'], fallback: '').trim();
       if (token.isEmpty) {
         throw ApiFailure(
@@ -503,7 +512,9 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                         controller: nameController,
                         keyboardType: TextInputType.name,
                         textCapitalization: TextCapitalization.words,
-                        decoration: const InputDecoration(labelText: 'Full name'),
+                        decoration: const InputDecoration(
+                          labelText: 'Full name',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextFormField(
@@ -515,7 +526,9 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                       TextFormField(
                         controller: passwordController,
                         obscureText: true,
-                        decoration: const InputDecoration(labelText: 'Password'),
+                        decoration: const InputDecoration(
+                          labelText: 'Password',
+                        ),
                       ),
                       const SizedBox(height: 12),
                       FilledButton.icon(
@@ -588,11 +601,13 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
     });
 
     try {
-      final payload = await ref.read(apiClientProvider).post(
-        '/v1/auth/signup',
-        {'email': email, 'password': password, 'name': name},
-        requiredFields: ['message', 'user'],
-      );
+      final payload = await ref
+          .read(apiClientProvider)
+          .post(
+            '/v1/auth/signup',
+            {'email': email, 'password': password, 'name': name},
+            requiredFields: ['message', 'user'],
+          );
 
       if (mounted) {
         showValidation(
@@ -670,7 +685,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                 : () async {
                     await persistAuthToken(null);
                     ref.read(authTokenProvider.notifier).state = null;
-                    ref.read(authStageProvider.notifier).state = AuthStage.loggedOut;
+                    ref.read(authStageProvider.notifier).state =
+                        AuthStage.loggedOut;
                     if (context.mounted) {
                       context.go('/login');
                     }
@@ -705,22 +721,29 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                       TextFormField(
                         controller: heightController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Height cm'),
+                        decoration: const InputDecoration(
+                          labelText: 'Height cm',
+                        ),
                       ),
                       TextFormField(
                         controller: weightController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Weight kg'),
+                        decoration: const InputDecoration(
+                          labelText: 'Weight kg',
+                        ),
                       ),
                       DropdownButtonFormField<String>(
                         initialValue: sex,
                         decoration: const InputDecoration(labelText: 'Sex'),
                         items: options(['male', 'female']),
-                        onChanged: (value) => setState(() => sex = value ?? sex),
+                        onChanged: (value) =>
+                            setState(() => sex = value ?? sex),
                       ),
                       DropdownButtonFormField<String>(
                         initialValue: activity,
-                        decoration: const InputDecoration(labelText: 'Activity level'),
+                        decoration: const InputDecoration(
+                          labelText: 'Activity level',
+                        ),
                         items: options([
                           'sedentary',
                           'lightly_active',
@@ -733,7 +756,9 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                       ),
                       DropdownButtonFormField<String>(
                         initialValue: goal,
-                        decoration: const InputDecoration(labelText: 'Nutrition goal'),
+                        decoration: const InputDecoration(
+                          labelText: 'Nutrition goal',
+                        ),
                         items: options([
                           'lose_weight',
                           'maintain_weight',
@@ -748,7 +773,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                           'reduce_saturated_fat',
                           'increase_fiber',
                         ]),
-                        onChanged: (value) => setState(() => goal = value ?? goal),
+                        onChanged: (value) =>
+                            setState(() => goal = value ?? goal),
                       ),
                       TextFormField(
                         controller: allergensController,
@@ -826,17 +852,19 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     });
 
     try {
-      await ref.read(apiClientProvider).post(
-        '/v1/profile/update',
-        body,
-        requiredFields: [
-          'user_id',
-          'goal',
-          'safety_screening',
-          'agreement_accepted',
-          'updated_at',
-        ],
-      );
+      await ref
+          .read(apiClientProvider)
+          .post(
+            '/v1/profile/update',
+            body,
+            requiredFields: [
+              'user_id',
+              'goal',
+              'safety_screening',
+              'agreement_accepted',
+              'updated_at',
+            ],
+          );
       await resolveAuthStage(ref);
       if (mounted) {
         context.go('/scan');
@@ -1031,11 +1059,13 @@ class ApiClient {
     Duration timeout = requestTimeout,
   }) async {
     try {
-      final response = await client.post(
-        _uri(path),
-        headers: _headers(includeJsonContentType: true),
-        body: jsonEncode(body),
-      ).timeout(timeout);
+      final response = await client
+          .post(
+            _uri(path),
+            headers: _headers(includeJsonContentType: true),
+            body: jsonEncode(body),
+          )
+          .timeout(timeout);
       return _parseResponse(response, requiredFields);
     } on ApiFailure {
       rethrow;
@@ -1335,15 +1365,16 @@ final chatControllerProvider =
     );
 
 final inventoryControllerProvider =
-    StateNotifierProvider<InventoryController, AsyncValue<List<InventoryItemRecord>>>(
-      (ref) => InventoryController(ref.read(apiClientProvider)),
-    );
+    StateNotifierProvider<
+      InventoryController,
+      AsyncValue<List<InventoryItemRecord>>
+    >((ref) => InventoryController(ref.read(apiClientProvider)));
 final selectedVisionIngredientsProvider = StateProvider<List<String>>(
   (ref) => const <String>[],
 );
 
-
-class InventoryController extends StateNotifier<AsyncValue<List<InventoryItemRecord>>> {
+class InventoryController
+    extends StateNotifier<AsyncValue<List<InventoryItemRecord>>> {
   InventoryController(this._client) : super(const AsyncValue.loading()) {
     unawaited(refresh());
   }
@@ -1435,7 +1466,6 @@ class InventoryController extends StateNotifier<AsyncValue<List<InventoryItemRec
   }
 }
 
-
 class InventoryClearResult {
   const InventoryClearResult({
     required this.deletedCount,
@@ -1486,9 +1516,13 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AsyncValue<ApiPayload>?>(scanControllerProvider, (previous, next) {
+    ref.listen<AsyncValue<ApiPayload>?>(scanControllerProvider, (
+      previous,
+      next,
+    ) {
       final didBecomeSuccessful =
-          (next is AsyncData<ApiPayload>) && (previous is! AsyncData<ApiPayload>);
+          (next is AsyncData<ApiPayload>) &&
+          (previous is! AsyncData<ApiPayload>);
       if (didBecomeSuccessful) {
         _scrollToScanResult();
       }
@@ -1687,12 +1721,17 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   Future<void> _addBarcodeScanToInventory(Map<String, Object?> raw) async {
     final barcode = inventoryBarcodeFromScanPayload(raw);
     if (barcode == null) {
-      showValidation(context, 'Could not determine a valid barcode from this result.');
+      showValidation(
+        context,
+        'Could not determine a valid barcode from this result.',
+      );
       return;
     }
 
     try {
-      await ref.read(inventoryControllerProvider.notifier).addFromBarcode(barcode);
+      await ref
+          .read(inventoryControllerProvider.notifier)
+          .addFromBarcode(barcode);
       if (mounted) {
         showValidation(context, 'Added to inventory.');
       }
@@ -1703,7 +1742,9 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     }
   }
 
-  Future<void> _addVisionIngredientsToInventory(InventoryImageSelection selection) async {
+  Future<void> _addVisionIngredientsToInventory(
+    InventoryImageSelection selection,
+  ) async {
     if (selection.selectedIngredients.isEmpty) {
       showValidation(context, 'Select at least one ingredient to add.');
       return;
@@ -1851,13 +1892,15 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
   @override
   Widget build(BuildContext context) {
     final inventoryState = ref.watch(inventoryControllerProvider);
-    final inventoryItems = inventoryState.valueOrNull ?? const <InventoryItemRecord>[];
+    final inventoryItems =
+        inventoryState.valueOrNull ?? const <InventoryItemRecord>[];
     final inventoryLoading = inventoryState.isLoading;
     final inventoryError = inventoryState.error;
-    final selectedVisionIngredients = ref.watch(selectedVisionIngredientsProvider);
-    final selectedImageInventoryIngredients = _selectedImageInventoryIngredients(
-      inventoryItems,
+    final selectedVisionIngredients = ref.watch(
+      selectedVisionIngredientsProvider,
     );
+    final selectedImageInventoryIngredients =
+        _selectedImageInventoryIngredients(inventoryItems);
     final effectiveImageIngredients = _mergeImageIngredients(
       selectedVisionIngredients,
       selectedImageInventoryIngredients,
@@ -1904,7 +1947,9 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
                     label: const Text('Add'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: inventoryItems.isEmpty ? null : _confirmClearInventory,
+                    onPressed: inventoryItems.isEmpty
+                        ? null
+                        : _confirmClearInventory,
                     icon: const Icon(Icons.delete_sweep_outlined),
                     label: const Text('Clear inventory'),
                   ),
@@ -2022,9 +2067,15 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
                             label: Text(item),
                             onDeleted: selectedVisionIngredients.contains(item)
                                 ? () {
-                                    final next = List<String>.from(selectedVisionIngredients)
-                                      ..remove(item);
-                                    ref.read(selectedVisionIngredientsProvider.notifier).state =
+                                    final next = List<String>.from(
+                                      selectedVisionIngredients,
+                                    )..remove(item);
+                                    ref
+                                            .read(
+                                              selectedVisionIngredientsProvider
+                                                  .notifier,
+                                            )
+                                            .state =
                                         next;
                                   }
                                 : null,
@@ -2039,7 +2090,9 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
                     onPressed: () {
-                      ref.read(selectedVisionIngredientsProvider.notifier).state =
+                      ref
+                              .read(selectedVisionIngredientsProvider.notifier)
+                              .state =
                           const <String>[];
                     },
                     icon: const Icon(Icons.clear_all_outlined),
@@ -2118,7 +2171,9 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
       return;
     }
     try {
-      await ref.read(inventoryControllerProvider.notifier).addManualItems(items);
+      await ref
+          .read(inventoryControllerProvider.notifier)
+          .addManualItems(items);
       manualInventoryController.clear();
       if (mounted) {
         showValidation(context, 'Inventory updated.');
@@ -2169,7 +2224,9 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
     }
 
     try {
-      final result = await ref.read(inventoryControllerProvider.notifier).clearAll();
+      final result = await ref
+          .read(inventoryControllerProvider.notifier)
+          .clearAll();
       if (!mounted) {
         return;
       }
@@ -2191,7 +2248,9 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
 
   void _suggest() {
     final pantryItems = _items();
-    final availableItems = ref.read(inventoryControllerProvider).valueOrNull ?? const <InventoryItemRecord>[];
+    final availableItems =
+        ref.read(inventoryControllerProvider).valueOrNull ??
+        const <InventoryItemRecord>[];
     final availableIds = availableItems.map((item) => item.id).toSet();
     final selectedInventoryIds = selectedInventoryItemIds
         .where((id) => availableIds.contains(id))
@@ -2201,8 +2260,7 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
       _selectedImageInventoryIngredients(availableItems),
     );
 
-    if (
-        pantryItems.isEmpty &&
+    if (pantryItems.isEmpty &&
         selectedInventoryIds.isEmpty &&
         recognizedIngredients.isEmpty) {
       showValidation(
@@ -2267,7 +2325,10 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
   ) {
     final merged = <String>[];
     final seen = <String>{};
-    for (final item in [...recognizedIngredients, ...imageInventoryIngredients]) {
+    for (final item in [
+      ...recognizedIngredients,
+      ...imageInventoryIngredients,
+    ]) {
       final cleaned = item.trim();
       if (cleaned.isEmpty) {
         continue;
@@ -2531,7 +2592,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       _applyProfile(payload.raw);
     } on TimeoutException {
       if (mounted) {
-        showValidation(context, 'Profile request timed out. Check that the backend is running.');
+        showValidation(
+          context,
+          'Profile request timed out. Check that the backend is running.',
+        );
       }
     } finally {
       if (mounted) {
@@ -2556,7 +2620,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         fallback: activity,
       );
       goal = optionFromProfile(profile['goal'], _goalOptions, fallback: goal);
-      applySafetyScreeningFromProfile(safetyScreening, profile['safety_screening']);
+      applySafetyScreeningFromProfile(
+        safetyScreening,
+        profile['safety_screening'],
+      );
       agreementAccepted = profile['agreement_accepted'] == true;
       profileLoaded = true;
     });
@@ -2741,7 +2808,8 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
                 decoration: const InputDecoration(labelText: 'Budget level'),
                 items: options(['low', 'mid', 'high']),
                 onChanged: canEditPlanInputs
-                    ? (value) => setState(() => budgetLevel = value ?? budgetLevel)
+                    ? (value) =>
+                          setState(() => budgetLevel = value ?? budgetLevel)
                     : null,
               ),
               TextFormField(
@@ -2801,18 +2869,20 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       profileLoadError = null;
     });
     try {
-      final payload = await ref.read(apiClientProvider).get(
-        '/v1/profile/me',
-        requiredFields: [
-          'user_id',
-          'age',
-          'sex',
-          'height_cm',
-          'weight_kg',
-          'activity_level',
-          'goal',
-        ],
-      );
+      final payload = await ref
+          .read(apiClientProvider)
+          .get(
+            '/v1/profile/me',
+            requiredFields: [
+              'user_id',
+              'age',
+              'sex',
+              'height_cm',
+              'weight_kg',
+              'activity_level',
+              'goal',
+            ],
+          );
       if (!mounted) {
         return;
       }
@@ -2835,7 +2905,10 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     }
     final profile = _planProfileFromSavedProfile();
     if (profile == null) {
-      showValidation(context, 'Load or complete your profile before generating a plan.');
+      showValidation(
+        context,
+        'Load or complete your profile before generating a plan.',
+      );
       return;
     }
     final mealsPerDay = int.tryParse(mealsPerDayController.text.trim());
@@ -2914,7 +2987,10 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       return false;
     }
     if (loadingProfile) {
-      showValidation(context, 'Profile is still loading. Please wait a moment.');
+      showValidation(
+        context,
+        'Profile is still loading. Please wait a moment.',
+      );
       return false;
     }
     return true;
@@ -2953,24 +3029,21 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     }
     return {
       'age_years': age,
-      'sex': optionFromProfile(
-        profile['sex'],
-        ['male', 'female', 'other', 'prefer_not_to_say'],
-        fallback: 'prefer_not_to_say',
-      ),
+      'sex': optionFromProfile(profile['sex'], [
+        'male',
+        'female',
+        'other',
+        'prefer_not_to_say',
+      ], fallback: 'prefer_not_to_say'),
       'height_cm': height,
       'weight_kg': weight,
-      'activity_level': optionFromProfile(
-        profile['activity_level'],
-        [
-          'sedentary',
-          'lightly_active',
-          'moderately_active',
-          'very_active',
-          'athlete',
-        ],
-        fallback: 'moderately_active',
-      ),
+      'activity_level': optionFromProfile(profile['activity_level'], [
+        'sedentary',
+        'lightly_active',
+        'moderately_active',
+        'very_active',
+        'athlete',
+      ], fallback: 'moderately_active'),
       'goal': _planGoal(profile['goal']),
       'allergens': _planAllergens(profile['allergens']),
       'dietary_exclusions': _planDietaryExclusions(
@@ -3037,7 +3110,14 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
         case 'vegetarian':
           exclusions.addAll(['meat', 'poultry', 'fish', 'shellfish']);
         case 'vegan':
-          exclusions.addAll(['meat', 'poultry', 'fish', 'shellfish', 'dairy', 'eggs']);
+          exclusions.addAll([
+            'meat',
+            'poultry',
+            'fish',
+            'shellfish',
+            'dairy',
+            'eggs',
+          ]);
         case 'dairy_free':
           exclusions.add('dairy');
         case 'egg_free':
@@ -3099,6 +3179,23 @@ class _GuidanceScreenState extends ConsumerState<GuidanceScreen> {
                 onPressed: _interpretLab,
                 icon: const Icon(Icons.health_and_safety_outlined),
                 label: const Text('Interpret lab marker'),
+              ),
+            ],
+          ),
+        ),
+        InputCard(
+          title: 'Lab report extraction',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Upload a lab report PDF or page images and let the backend extract structured lab results.',
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () => context.go('/labs/extract-report-test'),
+                icon: const Icon(Icons.upload_file_outlined),
+                label: const Text('Open extraction test'),
               ),
             ],
           ),
@@ -3281,6 +3378,12 @@ class DebugScreen extends ConsumerWidget {
               ref.read(debugModeProvider.notifier).state = value,
         ),
         Text('API base URL: $apiBaseUrl'),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => context.go('/labs/extract-report-test'),
+          icon: const Icon(Icons.science_outlined),
+          label: const Text('Lab report extraction test'),
+        ),
         AsyncPayloadView(
           title: 'Backend health',
           value: health,
@@ -3357,8 +3460,10 @@ class AsyncPayloadView extends ConsumerWidget {
   final AsyncValue<ApiPayload>? value;
   final VoidCallback onRetry;
   final ValueChanged<Map<String, Object?>>? onEstimateNutritionFromVision;
-  final Future<void> Function(Map<String, Object?> raw)? onAddBarcodeToInventory;
-  final Future<void> Function(InventoryImageSelection selection)? onAddInventoryFromVision;
+  final Future<void> Function(Map<String, Object?> raw)?
+  onAddBarcodeToInventory;
+  final Future<void> Function(InventoryImageSelection selection)?
+  onAddInventoryFromVision;
   final ValueChanged<List<String>>? onVisionSelectionChanged;
 
   @override
@@ -3483,8 +3588,10 @@ class PayloadCard extends ConsumerWidget {
   final String title;
   final ApiPayload payload;
   final ValueChanged<Map<String, Object?>>? onEstimateNutritionFromVision;
-  final Future<void> Function(Map<String, Object?> raw)? onAddBarcodeToInventory;
-  final Future<void> Function(InventoryImageSelection selection)? onAddInventoryFromVision;
+  final Future<void> Function(Map<String, Object?> raw)?
+  onAddBarcodeToInventory;
+  final Future<void> Function(InventoryImageSelection selection)?
+  onAddInventoryFromVision;
   final ValueChanged<List<String>>? onVisionSelectionChanged;
 
   @override
@@ -3583,9 +3690,9 @@ class BarcodeScanResultView extends StatelessWidget {
       children: [
         Text(
           productName,
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
         ),
         if (brand.isNotEmpty) ...[
           const SizedBox(height: 2),
@@ -3725,11 +3832,13 @@ class VisionIdentifyResultView extends StatefulWidget {
 
   final Map<String, Object?> raw;
   final ValueChanged<Map<String, Object?>>? onEstimateNutrition;
-  final Future<void> Function(InventoryImageSelection selection)? onAddToInventory;
+  final Future<void> Function(InventoryImageSelection selection)?
+  onAddToInventory;
   final ValueChanged<List<String>>? onSelectionChanged;
 
   @override
-  State<VisionIdentifyResultView> createState() => _VisionIdentifyResultViewState();
+  State<VisionIdentifyResultView> createState() =>
+      _VisionIdentifyResultViewState();
 }
 
 class _VisionIdentifyResultViewState extends State<VisionIdentifyResultView> {
@@ -3745,9 +3854,13 @@ class _VisionIdentifyResultViewState extends State<VisionIdentifyResultView> {
   @override
   void didUpdateWidget(covariant VisionIdentifyResultView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final previousImageId = text(oldWidget.raw['image_id'], fallback: '').trim();
+    final previousImageId = text(
+      oldWidget.raw['image_id'],
+      fallback: '',
+    ).trim();
     final currentImageId = text(widget.raw['image_id'], fallback: '').trim();
-    if (previousImageId != currentImageId || !mapEquals(oldWidget.raw, widget.raw)) {
+    if (previousImageId != currentImageId ||
+        !mapEquals(oldWidget.raw, widget.raw)) {
       _resetSelection();
     }
   }
@@ -3755,8 +3868,7 @@ class _VisionIdentifyResultViewState extends State<VisionIdentifyResultView> {
   void _resetSelection() {
     final recognized = _recognizedIngredientNames();
     _selectedIngredientKeys = {
-      for (final name in recognized)
-        _normalizedVisionName(name),
+      for (final name in recognized) _normalizedVisionName(name),
     };
     _notifySelectionChanged();
   }
@@ -3814,9 +3926,9 @@ class _VisionIdentifyResultViewState extends State<VisionIdentifyResultView> {
       children: [
         Text(
           topCandidate?.name ?? 'Unknown food item',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
         ),
         if (confidence != null) ...[
           const SizedBox(height: 2),
@@ -3884,7 +3996,8 @@ class _VisionIdentifyResultViewState extends State<VisionIdentifyResultView> {
                   title: Text(ingredientName),
                   subtitle: Builder(
                     builder: (_) {
-                      final candidate = candidateByKey[_normalizedVisionName(ingredientName)];
+                      final candidate =
+                          candidateByKey[_normalizedVisionName(ingredientName)];
                       if (candidate == null || candidate.confidence == null) {
                         return const SizedBox.shrink();
                       }
@@ -3922,11 +4035,16 @@ class _VisionIdentifyResultViewState extends State<VisionIdentifyResultView> {
 
                     final selectedIngredients = [
                       for (final name in recognizedNames)
-                        if (_selectedIngredientKeys.contains(_normalizedVisionName(name)))
+                        if (_selectedIngredientKeys.contains(
+                          _normalizedVisionName(name),
+                        ))
                           name,
                     ];
                     if (selectedIngredients.isEmpty) {
-                      showValidation(context, 'Select at least one ingredient to add.');
+                      showValidation(
+                        context,
+                        'Select at least one ingredient to add.',
+                      );
                       return;
                     }
 
@@ -3946,9 +4064,7 @@ class _VisionIdentifyResultViewState extends State<VisionIdentifyResultView> {
                   },
             icon: const Icon(Icons.playlist_add_outlined),
             label: Text(
-              _submittingInventory
-                  ? 'Adding...'
-                  : 'Add selected to inventory',
+              _submittingInventory ? 'Adding...' : 'Add selected to inventory',
             ),
           ),
         ],
@@ -4427,10 +4543,7 @@ class SafetyScreeningSection extends StatelessWidget {
             'I have abnormal lab results or health concerns',
           ),
           const Divider(),
-          _screeningTile(
-            'none_of_above',
-            'None of the above apply to me',
-          ),
+          _screeningTile('none_of_above', 'None of the above apply to me'),
           if (hasRestriction)
             const NoticeCard(
               icon: Icons.info_outline,
@@ -4477,9 +4590,7 @@ class AgreementSection extends StatelessWidget {
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const SingleChildScrollView(
-              child: Text(qimaAgreementText),
-            ),
+            child: const SingleChildScrollView(child: Text(qimaAgreementText)),
           ),
           const SizedBox(height: 8),
           CheckboxListTile(
@@ -4633,7 +4744,8 @@ List<InventoryItemRecord> inventoryItemsFromPayload(Map<String, Object?> raw) {
         sourceRef: text(item['source_ref'], fallback: '').trim().isEmpty
             ? null
             : text(item['source_ref'], fallback: '').trim(),
-        sourceProductId: text(item['source_product_id'], fallback: '').trim().isEmpty
+        sourceProductId:
+            text(item['source_product_id'], fallback: '').trim().isEmpty
             ? null
             : text(item['source_product_id'], fallback: '').trim(),
       ),
@@ -4654,7 +4766,9 @@ Map<String, Object?> buildInventoryManualAddBody(List<String> itemNames) {
   return {'items': cleaned};
 }
 
-Map<String, Object?> buildInventoryImageAddBody(InventoryImageSelection selection) {
+Map<String, Object?> buildInventoryImageAddBody(
+  InventoryImageSelection selection,
+) {
   return {
     'image_id': selection.imageId.trim(),
     'recognized_ingredients': [
@@ -4725,7 +4839,8 @@ Map<String, Object?> buildRecipeSuggestRequestBody({
     if (dedupedPantryItems.isNotEmpty) 'pantry_items': dedupedPantryItems,
     if (dedupedRecognizedIngredients.isNotEmpty)
       'recognized_ingredients': dedupedRecognizedIngredients,
-    if (dedupedInventoryIds.isNotEmpty) 'inventory_item_ids': dedupedInventoryIds,
+    if (dedupedInventoryIds.isNotEmpty)
+      'inventory_item_ids': dedupedInventoryIds,
     if (dietaryFilters.isNotEmpty) 'dietary_filters': dietaryFilters,
     if (excludedIngredients.isNotEmpty)
       'excluded_ingredients': excludedIngredients,
@@ -4742,7 +4857,10 @@ String? inventoryBarcodeFromScanPayload(Map<String, Object?> raw) {
 
   final source = raw['source'];
   if (source is Map) {
-    final providerProductId = text(source['provider_product_id'], fallback: '').trim();
+    final providerProductId = text(
+      source['provider_product_id'],
+      fallback: '',
+    ).trim();
     if (barcodePattern.hasMatch(providerProductId)) {
       return providerProductId;
     }
@@ -4960,7 +5078,10 @@ String nutritionBasisDisplayLabel(Object? rawNutrition) {
     if (explicit.isNotEmpty) {
       return explicit[0].toLowerCase() + explicit.substring(1);
     }
-    final basis = text(rawNutrition['basis'], fallback: '').trim().toLowerCase();
+    final basis = text(
+      rawNutrition['basis'],
+      fallback: '',
+    ).trim().toLowerCase();
     switch (basis) {
       case 'per_100ml':
         return 'per 100 ml';
@@ -5038,7 +5159,12 @@ List<NutritionRow> nutritionRows(Object? rawNutrition) {
     );
   }
 
-  addValue(['energy_kcal', 'calories_kcal'], 'Energy', unit: 'kcal', decimals: 0);
+  addValue(
+    ['energy_kcal', 'calories_kcal'],
+    'Energy',
+    unit: 'kcal',
+    decimals: 0,
+  );
   addValue(['protein_g'], 'Protein', unit: 'g', decimals: 1);
   addValue(['carbohydrates_g', 'carbs_g'], 'Carbs', unit: 'g', decimals: 1);
   addValue(['fat_g'], 'Fat', unit: 'g', decimals: 1);
@@ -5226,7 +5352,9 @@ String? formatNutritionSummary(Object? rawNutrition) {
     if (value == null) {
       return;
     }
-    lines.add('$label: ${formatNutritionNumber(value, decimals: decimals)} $unit');
+    lines.add(
+      '$label: ${formatNutritionNumber(value, decimals: decimals)} $unit',
+    );
   }
 
   addNutrient('energy_kcal', 'Energy', unit: 'kcal', decimals: 0);
@@ -5416,7 +5544,8 @@ bool safetyScreeningHasRestriction(Map<String, bool> values) {
 }
 
 bool safetyScreeningCompleted(Map<String, bool> values) {
-  return values['none_of_above'] == true || safetyScreeningHasRestriction(values);
+  return values['none_of_above'] == true ||
+      safetyScreeningHasRestriction(values);
 }
 
 void updateSafetyScreening(Map<String, bool> values, String key, bool value) {
@@ -5433,9 +5562,7 @@ void updateSafetyScreening(Map<String, bool> values, String key, bool value) {
 }
 
 Map<String, Object?> safetyScreeningBody(Map<String, bool> values) {
-  return {
-    for (final entry in values.entries) entry.key: entry.value,
-  };
+  return {for (final entry in values.entries) entry.key: entry.value};
 }
 
 void applySafetyScreeningFromProfile(Map<String, bool> values, Object? raw) {
@@ -5463,9 +5590,12 @@ String commaSeparatedText(Object? value) {
   if (value is! List) {
     return '';
   }
-  return value.map((item) => text(item, fallback: '').trim()).where((item) {
-    return item.isNotEmpty;
-  }).join(', ');
+  return value
+      .map((item) => text(item, fallback: '').trim())
+      .where((item) {
+        return item.isNotEmpty;
+      })
+      .join(', ');
 }
 
 String optionFromProfile(

@@ -20,6 +20,12 @@ Required for `/v1/vision/identify`:
 
 - `GEMINI_API_KEY`
 
+Image uploads to `/v1/labs/extract-report` use local PaddleOCR. First use may
+download model files into `backend/.cache`.
+
+PDF uploads to `/v1/labs/extract-report` use local `opendataloader-pdf` mode.
+Scanned PDFs are not OCR'd in the MVP; upload scanned pages as images instead.
+
 Optional Gemini tuning:
 
 - `GEMINI_REQUEST_TIMEOUT_SECONDS` (default: `20`)
