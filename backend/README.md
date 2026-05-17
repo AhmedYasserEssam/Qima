@@ -20,10 +20,19 @@ Required for `/v1/vision/identify`:
 
 - `GEMINI_API_KEY`
 
+Required for `/v1/recipes/discuss`:
+
+- `OPENAI_API_KEY`
+
 Optional Gemini tuning:
 
 - `GEMINI_REQUEST_TIMEOUT_SECONDS` (default: `20`)
 - `GEMINI_INLINE_IMAGE_MAX_BYTES` (default: `18000000`)
+
+Optional OpenAI tuning:
+
+- `OPENAI_RECIPE_DISCUSS_MODEL` (default: `gpt-5.4-mini`)
+- `OPENAI_REQUEST_TIMEOUT_SECONDS` (default: `20`)
 
 Driver behavior:
 

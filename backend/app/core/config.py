@@ -58,6 +58,33 @@ class Settings(BaseSettings):
         default=18_000_000,
         alias="GEMINI_INLINE_IMAGE_MAX_BYTES",
     )
+    recipe_discussion_provider: str = Field(
+        default="groq",
+        alias="RECIPE_DISCUSSION_PROVIDER",
+    )
+    recipe_discussion_model: str = Field(
+        default="llama-3.1-8b-instant",
+        alias="RECIPE_DISCUSSION_MODEL",
+    )
+    recipe_discussion_timeout_seconds: float = Field(
+        default=20.0,
+        alias="RECIPE_DISCUSSION_TIMEOUT_SECONDS",
+    )
+    recipe_discussion_temperature: float = Field(
+        default=0.2,
+        alias="RECIPE_DISCUSSION_TEMPERATURE",
+    )
+    recipe_discussion_max_tokens: int = Field(
+        default=700,
+        alias="RECIPE_DISCUSSION_MAX_TOKENS",
+    )
+    recipe_discussion_max_retries: int = Field(
+        default=2,
+        alias="RECIPE_DISCUSSION_MAX_RETRIES",
+    )
+
+    openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     qima_recipe_debug_enabled: bool = Field(
         default=False,
         alias="QIMA_RECIPE_DEBUG_ENABLED",

@@ -291,12 +291,7 @@ void main() {
   });
 
   test('manual inventory add body uses items list', () {
-    final body = buildInventoryManualAddBody([
-      ' rice ',
-      'onion',
-      '',
-      '  ',
-    ]);
+    final body = buildInventoryManualAddBody([' rice ', 'onion', '', '  ']);
     expect(body, {
       'items': ['rice', 'onion'],
     });
@@ -334,16 +329,101 @@ void main() {
     expect(missingBarcode, isNull);
   });
 
-  test('recipe suggest body includes inventory ids pantry and budget level', () {
-    final body = buildRecipeSuggestRequestBody(
-      budgetLevel: 'mid',
-      inventoryItemIds: [7, 7, 3],
-      pantryItems: [' rice ', 'lentils', 'Rice'],
+  test(
+    'recipe suggest body includes inventory ids pantry and budget level',
+    () {
+      final body = buildRecipeSuggestRequestBody(
+        budgetLevel: 'mid',
+        inventoryItemIds: [7, 7, 3],
+        pantryItems: [' rice ', 'lentils', 'Rice'],
+      );
+
+      expect(body['budget_level'], 'mid');
+      expect(body['inventory_item_ids'], [7, 3]);
+      expect(body['pantry_items'], ['rice', 'lentils']);
+    },
+  );
+
+  test('recipe suggestions are parsed into selectable records', () {
+    final recipes = recipeSuggestionsFromPayload({
+      'recipes': [
+        {
+          'recipe_id': 'recipe_001',
+          'title': 'Tomato Lentil Skillet',
+          'match_score': 0.82,
+          'matched_ingredients': ['lentils', 'tomato'],
+          'missing_ingredients': ['butter'],
+        },
+      ],
+    });
+
+    expect(recipes, hasLength(1));
+    expect(recipes.first.recipeId, 'recipe_001');
+    expect(recipes.first.title, 'Tomato Lentil Skillet');
+    expect(recipes.first.matchedIngredients, ['lentils', 'tomato']);
+    expect(recipes.first.missingIngredients, ['butter']);
+    expect(recipes.first.summary, contains('Match 82%'));
+  });
+
+  test(
+    'recipe discuss body includes context transcript and valid fields only',
+    () {
+      final body = buildRecipeDiscussRequestBody(
+        recipeId: 'recipe_001',
+        selectedRecipe: const RecipeSuggestionRecord(
+          recipeId: 'recipe_001',
+          title: 'Tomato Lentil Skillet',
+          matchScore: 0.82,
+          matchedIngredients: ['lentils', 'tomato'],
+          missingIngredients: ['butter'],
+        ),
+        question: ' What can I substitute for butter? ',
+        conversationHistory: const [
+          RecipeChatTurn(role: 'user', content: 'How do I start?'),
+          RecipeChatTurn(role: 'assistant', content: 'Heat the skillet first.'),
+        ],
+      );
+
+      expect(body['recipe_id'], 'recipe_001');
+      expect(body['question'], 'What can I substitute for butter?');
+      expect(body['candidate_context'], {
+        'title': 'Tomato Lentil Skillet',
+        'matched_ingredients': ['lentils', 'tomato'],
+        'missing_ingredients': ['butter'],
+      });
+      expect(body['conversation_history'], [
+        {'role': 'user', 'content': 'How do I start?'},
+        {'role': 'assistant', 'content': 'Heat the skillet first.'},
+      ]);
+      expect(body.containsKey('conversation_intent'), isFalse);
+      expect(body.containsKey('price_context'), isFalse);
+    },
+  );
+
+  test('recipe discuss body keeps the latest eight valid transcript turns', () {
+    final body = buildRecipeDiscussRequestBody(
+      recipeId: 'recipe_001',
+      selectedRecipe: null,
+      question: 'Continue',
+      conversationHistory: [
+        for (var index = 0; index < 10; index += 1)
+          RecipeChatTurn(
+            role: index.isEven ? 'user' : 'assistant',
+            content: 'turn $index',
+          ),
+      ],
     );
 
-    expect(body['budget_level'], 'mid');
-    expect(body['inventory_item_ids'], [7, 3]);
-    expect(body['pantry_items'], ['rice', 'lentils']);
+    expect(body['conversation_history'], [
+      {'role': 'user', 'content': 'turn 2'},
+      {'role': 'assistant', 'content': 'turn 3'},
+      {'role': 'user', 'content': 'turn 4'},
+      {'role': 'assistant', 'content': 'turn 5'},
+      {'role': 'user', 'content': 'turn 6'},
+      {'role': 'assistant', 'content': 'turn 7'},
+      {'role': 'user', 'content': 'turn 8'},
+      {'role': 'assistant', 'content': 'turn 9'},
+    ]);
   });
 }
 
