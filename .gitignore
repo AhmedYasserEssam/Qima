@@ -52,6 +52,7 @@ backend/.pytest_cache/
 backend/pytest-cache-files-*/
 backend/.ruff_cache/
 backend/.mypy_cache/
+backend/.cache/
 scrappers/__pycache__/
 scrappers/tmp_*/
 scrappers/tmp_*.html

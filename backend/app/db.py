@@ -15,6 +15,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL is not set")
 
+
 def _postgres_driver_prefix() -> str:
     if find_spec("psycopg") is not None:
         return "postgresql+psycopg://"
@@ -41,6 +42,20 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 RECIPE_EMBEDDING_DIMENSION = 384
 
 
+def _sql_json_type() -> str:
+    return "JSONB" if engine.dialect.name == "postgresql" else "JSON"
+
+
+def _sql_id_type() -> str:
+    return "BIGSERIAL" if engine.dialect.name == "postgresql" else "INTEGER"
+
+
+def _sql_json_default(value: str) -> str:
+    if engine.dialect.name == "postgresql":
+        return f"'{value}'::jsonb"
+    return f"'{value}'"
+
+
 def _try_init_pgvector_extension() -> bool:
     try:
         with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
@@ -62,6 +77,93 @@ def _create_recipe_embedding_schema(conn) -> None:
                 embedding vector({RECIPE_EMBEDDING_DIMENSION}) NOT NULL,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+            """
+        )
+    )
+
+
+def _create_lab_report_schema(conn) -> None:
+    id_type = _sql_id_type()
+    json_type = _sql_json_type()
+    empty_array = _sql_json_default("[]")
+    conn.execute(
+        text(
+            f"""
+            CREATE TABLE IF NOT EXISTS lab_reports (
+                id {id_type} PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                input_type TEXT NOT NULL,
+                report_type TEXT NOT NULL,
+                sections_found {json_type} NOT NULL DEFAULT {empty_array},
+                source_extraction_method TEXT NOT NULL,
+                pages_processed INTEGER,
+                images_processed INTEGER,
+                warnings {json_type} NOT NULL DEFAULT {empty_array},
+                raw_text_preview TEXT,
+                extracted_at TIMESTAMP NOT NULL,
+                confirmed_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL
+            );
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_lab_reports_user_id
+            ON lab_reports(user_id);
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_lab_reports_user_created_at
+            ON lab_reports(user_id, created_at);
+            """
+        )
+    )
+    conn.execute(
+        text(
+            f"""
+            CREATE TABLE IF NOT EXISTS lab_report_tests (
+                id {id_type} PRIMARY KEY,
+                lab_report_id BIGINT NOT NULL REFERENCES lab_reports(id) ON DELETE CASCADE,
+                section TEXT NOT NULL,
+                test_name TEXT NOT NULL,
+                canonical_test_key TEXT NOT NULL,
+                result_value_numeric DOUBLE PRECISION,
+                result_value_text TEXT,
+                unit TEXT,
+                reference_interval_raw TEXT,
+                reference_interval_type TEXT NOT NULL,
+                reference_low DOUBLE PRECISION,
+                reference_high DOUBLE PRECISION,
+                reference_operator TEXT,
+                reference_bands {json_type} NOT NULL DEFAULT {empty_array},
+                status TEXT NOT NULL,
+                matched_band TEXT,
+                raw_text TEXT NOT NULL,
+                confidence DOUBLE PRECISION,
+                created_at TIMESTAMP NOT NULL
+            );
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_lab_report_tests_lab_report_id
+            ON lab_report_tests(lab_report_id);
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_lab_report_tests_canonical_test_key
+            ON lab_report_tests(canonical_test_key);
             """
         )
     )
@@ -399,6 +501,7 @@ def init_db() -> None:
                 """
             )
         )
+        _create_lab_report_schema(conn)
         conn.execute(
             text(
                 """
