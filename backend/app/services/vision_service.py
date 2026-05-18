@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import mimetypes
 import time
 from typing import Any, Literal
@@ -204,7 +205,8 @@ class GeminiVisionClient:
 
         if response.status_code >= 400:
             raise UpstreamUnavailableError(
-                "Vision identification service is currently unavailable."
+                "Vision provider request failed with HTTP "
+                f"{response.status_code}: {_response_error_message(response)}"
             )
 
         try:
@@ -319,6 +321,7 @@ def _build_prompt(locale: str | None) -> str:
         prompt += f" User locale: {locale}."
     return prompt
 
+
 def _extract_response_text(response_payload: dict[str, Any]) -> str:
     candidates = response_payload.get("candidates")
     if not isinstance(candidates, list):
@@ -346,6 +349,26 @@ def _extract_response_text(response_payload: dict[str, Any]) -> str:
     raise UpstreamUnavailableError(
         "Vision identification service returned no structured content."
     )
+
+
+def _response_error_message(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        return response.text.strip()[:500] or "empty response body"
+
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict):
+            message = error.get("message")
+            if isinstance(message, str) and message.strip():
+                return message.strip()[:500]
+        try:
+            return json.dumps(payload, ensure_ascii=True)[:500]
+        except TypeError:
+            return str(payload)[:500]
+
+    return str(payload)[:500]
 
 
 def _validate_image_size(image_bytes: bytes, max_image_bytes: int) -> None:

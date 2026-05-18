@@ -5,6 +5,12 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.schemas.v1.lab_report import (
+    LabReportReferenceInterval,
+    LabReportSection,
+    LabReportStatus,
+)
+
 
 class StrictBaseModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -77,7 +83,9 @@ class SafetyScreening(StrictBaseModel):
     @model_validator(mode="after")
     def validate_completion(self) -> "SafetyScreening":
         if self.none_of_above and self.has_restriction:
-            raise ValueError("none_of_above cannot be selected with another safety option")
+            raise ValueError(
+                "none_of_above cannot be selected with another safety option"
+            )
         if not self.none_of_above and not self.has_restriction:
             raise ValueError("Complete the safety screening before continuing")
         return self
@@ -114,6 +122,20 @@ class NutritionProfileCreateUpdate(StrictBaseModel):
         return value
 
 
+class ProfileLabResult(StrictBaseModel):
+    report_id: int = Field(..., ge=1)
+    test_name: str = Field(..., min_length=1)
+    canonical_test_key: str = Field(..., min_length=1)
+    section: LabReportSection
+    result_value: float | str | None
+    unit: str | None = None
+    reference_interval: LabReportReferenceInterval
+    status: LabReportStatus
+    matched_band: str | None = None
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    confirmed_at: datetime
+
+
 class NutritionProfileResponse(StrictBaseModel):
     user_id: int
     age: int
@@ -126,4 +148,5 @@ class NutritionProfileResponse(StrictBaseModel):
     dietary_restrictions: list[str]
     safety_screening: SafetyScreening
     agreement_accepted: bool
+    lab_results: list[ProfileLabResult] = Field(default_factory=list)
     updated_at: datetime

@@ -18,6 +18,12 @@ class ParsedRecipeIngredient:
     normalized_name: str
     form_tags: frozenset[str]
     role: str | None = None
+    raw_text: str | None = None
+    quantity: float | str | None = None
+    unit: str | None = None
+    package_size: dict[str, Any] | None = None
+    notes: str | None = None
+    modifiers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -71,21 +77,55 @@ class RecipeRetrievalService:
         seen: set[str] = set()
 
         for value in values:
+            matching_text = ""
             if isinstance(value, str):
                 display = value.strip()
                 ingredient_name = display
+                matching_text = display
                 role = None
+                raw_text = display
+                quantity = None
+                unit = None
+                package_size = None
+                notes = None
+                modifiers = ()
             elif isinstance(value, dict):
                 display = self._extract_display_text(value)
                 ingredient_name = self._extract_ingredient_name(value) or display
+                matching_text = self._matching_text(value, ingredient_name or display)
+                normalized_display = normalize_name(display)
+                normalized_matching = normalize_name(matching_text)
+                if normalized_matching and normalized_matching != normalized_display:
+                    display = normalized_matching
                 role = str(value.get("ingredient_role") or "").strip() or None
+                raw_text = str(value.get("raw") or "").strip() or display
+                quantity = value.get("quantity")
+                unit = self._string_or_none(value.get("unit"))
+                package_size = (
+                    dict(value["package_size"])
+                    if isinstance(value.get("package_size"), dict)
+                    else None
+                )
+                notes = self._string_or_none(value.get("notes"))
+                raw_modifiers = value.get("modifiers")
+                modifiers = (
+                    tuple(
+                        item
+                        for item in (
+                            self._string_or_none(modifier) for modifier in raw_modifiers
+                        )
+                        if item is not None
+                    )
+                    if isinstance(raw_modifiers, list)
+                    else ()
+                )
             else:
                 continue
 
             if not display and not ingredient_name:
                 continue
 
-            normalized = normalize_name(display or ingredient_name)
+            normalized = normalize_name(matching_text or display or ingredient_name)
             if not normalized or normalized in seen:
                 continue
             seen.add(normalized)
@@ -96,6 +136,12 @@ class RecipeRetrievalService:
                     normalized_name=normalized,
                     form_tags=extract_form_tags(normalized),
                     role=role,
+                    raw_text=raw_text,
+                    quantity=quantity,
+                    unit=unit,
+                    package_size=package_size,
+                    notes=notes,
+                    modifiers=modifiers,
                 )
             )
 
@@ -162,13 +208,46 @@ class RecipeRetrievalService:
             return text_candidate
         return ""
 
+    def _matching_text(self, value: dict[str, Any], fallback: str) -> str:
+        base = str(fallback or "").strip()
+        normalized_base = normalize_name(base)
+        modifiers = value.get("modifiers")
+        if not isinstance(modifiers, list) or not normalized_base:
+            return base
+
+        base_tokens = set(normalized_base.split())
+        meaningful_modifiers: list[str] = []
+        seen: set[str] = set()
+        for modifier in modifiers:
+            normalized_modifier = normalize_name(str(modifier or ""))
+            if not normalized_modifier:
+                continue
+            if normalized_modifier in seen or normalized_modifier in base_tokens:
+                continue
+            if not extract_form_tags(normalized_modifier):
+                continue
+            meaningful_modifiers.append(normalized_modifier)
+            seen.add(normalized_modifier)
+
+        if not meaningful_modifiers:
+            return base
+
+        return " ".join([*meaningful_modifiers, normalized_base])
+
+    def _string_or_none(self, value: Any) -> str | None:
+        if value is None:
+            return None
+        text_value = str(value).strip()
+        return text_value or None
+
     def _load_records_from_db(
         self,
     ) -> tuple[list[RecipeRecord], dict[str, set[int]]]:
         with SessionLocal() as session:
-            rows = session.execute(
-                text(
-                    """
+            rows = (
+                session.execute(
+                    text(
+                        """
                     SELECT
                         source_url,
                         source,
@@ -191,8 +270,11 @@ class RecipeRetrievalService:
                     FROM allrecipes_recipes
                     ORDER BY COALESCE(rating, 0) DESC, COALESCE(review_count, 0) DESC
                     """
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
 
         records: list[RecipeRecord] = []
         by_ingredient: dict[str, set[int]] = {}
@@ -205,7 +287,9 @@ class RecipeRetrievalService:
 
             ingredient_display_by_name: dict[str, str] = {}
             for item in parsed_ingredients:
-                ingredient_display_by_name.setdefault(item.normalized_name, item.display_text)
+                ingredient_display_by_name.setdefault(
+                    item.normalized_name, item.display_text
+                )
 
             ingredient_set = frozenset(ingredient_display_by_name.keys())
             record = RecipeRecord(

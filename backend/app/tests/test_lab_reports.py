@@ -118,6 +118,42 @@ def _save_payload() -> dict:
     }
 
 
+def _profile_payload() -> dict:
+    return {
+        "age": 34,
+        "sex": "male",
+        "height_cm": 178,
+        "weight_kg": 82,
+        "activity_level": "moderately_active",
+        "goal": "improve_general_health",
+        "allergens": [],
+        "dietary_restrictions": [],
+        "safety_screening": {
+            "pregnant": False,
+            "breastfeeding": False,
+            "eating_disorder_history": False,
+            "under_18": False,
+            "medical_condition_affects_diet": False,
+            "abnormal_labs_or_health_concerns": False,
+            "none_of_above": True,
+        },
+        "agreement_accepted": True,
+    }
+
+
+def _single_calcium_payload(*, value: float) -> dict:
+    payload = _save_payload()
+    calcium = dict(payload["tests"][0])
+    calcium["result_value"] = value
+    calcium["raw_text"] = f"Calcium (Total), Serum mg/dL {value} 8.8 - 10.6"
+    return {
+        **payload,
+        "sections_found": ["chemistry"],
+        "raw_text_preview": calcium["raw_text"],
+        "tests": [calcium],
+    }
+
+
 def test_create_lab_report_creates_report_and_tests() -> None:
     headers, user_id, email = _auth_headers()
     try:
@@ -194,6 +230,111 @@ def test_list_endpoint_returns_only_current_user_reports() -> None:
     finally:
         _cleanup_user(first_email)
         _cleanup_user(second_email)
+
+
+def test_profile_includes_latest_saved_lab_results() -> None:
+    headers, _, email = _auth_headers()
+    try:
+        profile = client.post(
+            "/v1/profile/update", json=_profile_payload(), headers=headers
+        )
+        assert profile.status_code == 200
+
+        saved = client.post("/v1/labs/reports", json=_save_payload(), headers=headers)
+        assert saved.status_code == 201
+        report_id = saved.json()["report"]["id"]
+
+        response = client.get("/v1/profile/me", headers=headers)
+
+        assert response.status_code == 200
+        lab_results = response.json()["lab_results"]
+        assert len(lab_results) == 2
+        calcium = next(
+            result
+            for result in lab_results
+            if result["canonical_test_key"] == "calcium_total_serum"
+        )
+        assert calcium["report_id"] == report_id
+        assert calcium["test_name"] == "Calcium (Total), Serum"
+        assert calcium["result_value"] == 9.6
+        assert calcium["unit"] == "mg/dL"
+        assert calcium["status"] == "within_range"
+        assert calcium["reference_interval"]["raw"] == "8.8 - 10.6"
+        assert calcium["confirmed_at"]
+    finally:
+        _cleanup_user(email)
+
+
+def test_profile_lab_results_use_newest_report_per_marker_and_keep_history() -> None:
+    headers, _, email = _auth_headers()
+    try:
+        profile = client.post(
+            "/v1/profile/update", json=_profile_payload(), headers=headers
+        )
+        assert profile.status_code == 200
+
+        first = client.post(
+            "/v1/labs/reports",
+            json=_single_calcium_payload(value=9.6),
+            headers=headers,
+        )
+        second = client.post(
+            "/v1/labs/reports",
+            json=_single_calcium_payload(value=11.2),
+            headers=headers,
+        )
+        assert first.status_code == 201
+        assert second.status_code == 201
+
+        response = client.get("/v1/profile/me", headers=headers)
+        listed = client.get("/v1/labs/reports", headers=headers)
+
+        assert response.status_code == 200
+        lab_results = response.json()["lab_results"]
+        assert len(lab_results) == 1
+        assert lab_results[0]["canonical_test_key"] == "calcium_total_serum"
+        assert lab_results[0]["report_id"] == second.json()["report"]["id"]
+        assert lab_results[0]["result_value"] == 11.2
+        assert lab_results[0]["status"] == "above_range"
+
+        assert listed.status_code == 200
+        assert len(listed.json()["reports"]) == 2
+    finally:
+        _cleanup_user(email)
+
+
+def test_profile_lab_results_are_scoped_to_current_user() -> None:
+    owner_headers, _, owner_email = _auth_headers()
+    other_headers, _, other_email = _auth_headers()
+    try:
+        assert (
+            client.post(
+                "/v1/profile/update",
+                json=_profile_payload(),
+                headers=owner_headers,
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                "/v1/profile/update",
+                json=_profile_payload(),
+                headers=other_headers,
+            ).status_code
+            == 200
+        )
+        created = client.post(
+            "/v1/labs/reports", json=_save_payload(), headers=owner_headers
+        )
+        assert created.status_code == 201
+
+        other_profile = client.get("/v1/profile/me", headers=other_headers)
+
+        assert other_profile.status_code == 200
+        assert other_profile.json()["lab_results"] == []
+    finally:
+        _cleanup_user(owner_email)
+        _cleanup_user(other_email)
 
 
 def test_detail_endpoint_denies_reports_owned_by_another_user() -> None:

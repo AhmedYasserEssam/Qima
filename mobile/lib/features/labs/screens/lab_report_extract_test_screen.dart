@@ -71,7 +71,7 @@ class _LabReportExtractTestScreenState
       padding: const EdgeInsets.all(16),
       children: [
         Text(
-          'Lab Report Extraction Test',
+          'Scan Lab Report',
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 12),
@@ -277,8 +277,8 @@ class _LabReportExtractTestScreenState
       final id = saved.report?.id;
       setState(() {
         _successMessage = id == null
-            ? 'Lab report saved.'
-            : 'Lab report saved. Report ID: $id';
+            ? 'Lab results saved to profile.'
+            : 'Lab results saved to profile. Report ID: $id';
       });
     } on LabReportUploadException catch (error) {
       _setError(error.message);

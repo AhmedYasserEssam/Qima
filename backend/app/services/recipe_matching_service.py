@@ -158,7 +158,9 @@ class RecipeMatchingService:
 
         for input_ingredient in inputs:
             exact_candidates = self._exact_candidates(input_ingredient.normalized_name)
-            fuzzy_candidates = self._fuzzy_candidates(input_ingredient.normalized_name, top_n=40)
+            fuzzy_candidates = self._fuzzy_candidates(
+                input_ingredient.normalized_name, top_n=40
+            )
             semantic_candidates = self._semantic_provider.query(
                 input_ingredient.normalized_name, top_n=40
             )
@@ -207,7 +209,10 @@ class RecipeMatchingService:
                             }
                             for item in rejected[:5]
                         ],
-                        top_candidates=[self._candidate_debug_payload(item) for item in top_candidates],
+                        top_candidates=[
+                            self._candidate_debug_payload(item)
+                            for item in top_candidates
+                        ],
                     )
                 )
                 continue
@@ -235,7 +240,9 @@ class RecipeMatchingService:
                         }
                         for item in rejected[:5]
                     ],
-                    top_candidates=[self._candidate_debug_payload(item) for item in top_candidates],
+                    top_candidates=[
+                        self._candidate_debug_payload(item) for item in top_candidates
+                    ],
                 )
             )
 
@@ -257,7 +264,9 @@ class RecipeMatchingService:
                 debug={
                     "received_ingredients": requested_ingredients,
                     "normalized_ingredients": [item.normalized_name for item in inputs],
-                    "candidate_ingredient_matches": self._ingredient_match_debug(ingredient_matches),
+                    "candidate_ingredient_matches": self._ingredient_match_debug(
+                        ingredient_matches
+                    ),
                     "recipe_candidate_count": 0,
                     "top_recipe_scores": [],
                     "rejected_candidates": rejected_candidates,
@@ -266,8 +275,14 @@ class RecipeMatchingService:
                 },
             )
 
-        candidate_recipe_indices = recipe_retrieval_service.recipe_indices_for_ingredients(
-            [match.matched_canonical_name for match in strong_matches if match.matched_canonical_name]
+        candidate_recipe_indices = (
+            recipe_retrieval_service.recipe_indices_for_ingredients(
+                [
+                    match.matched_canonical_name
+                    for match in strong_matches
+                    if match.matched_canonical_name
+                ]
+            )
         )
 
         scored_recipes: list[ScoredRecipe] = []
@@ -283,7 +298,9 @@ class RecipeMatchingService:
         requested_count = len(inputs)
         for recipe_index in candidate_recipe_indices:
             recipe = recipe_retrieval_service.get_recipe_records()[recipe_index]
-            if self._has_excluded_ingredient(recipe.ingredient_set, excluded_normalized):
+            if self._has_excluded_ingredient(
+                recipe.ingredient_set, excluded_normalized
+            ):
                 continue
             if not self._passes_dietary_filters(recipe.row, normalized_dietary_filters):
                 continue
@@ -323,14 +340,19 @@ class RecipeMatchingService:
 
             coverage_ratio = len(matched_inputs) / max(1, requested_count)
             average_confidence = sum(matched_scores) / max(1, len(matched_scores))
-            matched_recipe_ratio = len(matched_recipe_set) / max(1, len(recipe.ingredient_set))
+            matched_recipe_ratio = len(matched_recipe_set) / max(
+                1, len(recipe.ingredient_set)
+            )
             rating_component = min(
                 1.0,
                 max(0.0, (self._to_float(recipe.row.get("rating")) or 0.0) / 5.0),
             )
             review_component = min(
                 1.0,
-                max(0.0, (self._to_float(recipe.row.get("review_count")) or 0.0) / 1000.0),
+                max(
+                    0.0,
+                    (self._to_float(recipe.row.get("review_count")) or 0.0) / 1000.0,
+                ),
             )
 
             score = (
@@ -366,7 +388,9 @@ class RecipeMatchingService:
 
         warnings: list[str] = []
         if not limited:
-            warnings.append("No strong recipe matches were found for the supplied ingredients.")
+            warnings.append(
+                "No strong recipe matches were found for the supplied ingredients."
+            )
 
         return RecipeMatchingResult(
             scored_recipes=limited,
@@ -375,7 +399,9 @@ class RecipeMatchingService:
             debug={
                 "received_ingredients": requested_ingredients,
                 "normalized_ingredients": [item.normalized_name for item in inputs],
-                "candidate_ingredient_matches": self._ingredient_match_debug(ingredient_matches),
+                "candidate_ingredient_matches": self._ingredient_match_debug(
+                    ingredient_matches
+                ),
                 "recipe_candidate_count": len(candidate_recipe_indices),
                 "top_recipe_scores": [
                     {
@@ -391,7 +417,9 @@ class RecipeMatchingService:
             },
         )
 
-    def _prepare_inputs(self, requested_ingredients: list[str]) -> list[InputIngredient]:
+    def _prepare_inputs(
+        self, requested_ingredients: list[str]
+    ) -> list[InputIngredient]:
         seen: set[str] = set()
         prepared: list[InputIngredient] = []
         for raw in requested_ingredients:
@@ -462,8 +490,14 @@ class RecipeMatchingService:
             entry = self._entries_by_name.get(name)
             if entry is None:
                 continue
-            lexical_score = max(exact_candidates.get(name, 0.0), fuzzy_candidates.get(name, 0.0))
-            semantic_score = semantic_candidates.get(name, 0.0) if semantic_available else 0.0
+            lexical_score = max(
+                exact_candidates.get(name, 0.0), fuzzy_candidates.get(name, 0.0)
+            )
+            semantic_score = (
+                semantic_candidates.get(name, 0.0) if semantic_available else 0.0
+            )
+            if name in exact_candidates:
+                semantic_score = max(semantic_score, 1.0)
             token_overlap_score = self._token_overlap(
                 input_ingredient.normalized_name, name
             )
@@ -531,9 +565,17 @@ class RecipeMatchingService:
     ) -> float:
         if not query_form_tags and not candidate_form_tags:
             return 1.0
-        if query_form_tags and candidate_form_tags and query_form_tags & candidate_form_tags:
+        if (
+            query_form_tags
+            and candidate_form_tags
+            and query_form_tags & candidate_form_tags
+        ):
             return 1.0
-        if query_form_tags and candidate_form_tags and not (query_form_tags & candidate_form_tags):
+        if (
+            query_form_tags
+            and candidate_form_tags
+            and not (query_form_tags & candidate_form_tags)
+        ):
             return 0.25
         if query_form_tags and not candidate_form_tags:
             return 0.65
@@ -557,13 +599,21 @@ class RecipeMatchingService:
         rejection_reasons: list[str] = []
         penalty = 1.0
 
-        if "milk" in query_tokens and "chocolate" in candidate_tokens and "chocolate" not in query_tokens:
+        if (
+            "milk" in query_tokens
+            and "chocolate" in candidate_tokens
+            and "chocolate" not in query_tokens
+        ):
             return True, ["Rejected milk-to-milk-chocolate mismatch."], 0.0
         if {"chicken", "breast"} <= query_tokens and (
             {"stock", "cube"} & candidate_tokens
         ):
             return True, ["Rejected chicken-breast-to-stock-cube mismatch."], 0.0
-        if "rice" in query_tokens and "pudding" in candidate_tokens and "pudding" not in query_tokens:
+        if (
+            "rice" in query_tokens
+            and "pudding" in candidate_tokens
+            and "pudding" not in query_tokens
+        ):
             return True, ["Rejected rice-to-rice-pudding mismatch."], 0.0
 
         query_processed = bool(query_tokens & PROCESSED_TERMS)
@@ -574,7 +624,11 @@ class RecipeMatchingService:
                 "Penalized processed/flavored candidate for generic ingredient query."
             )
 
-        if query_form_tags and candidate_form_tags and not (query_form_tags & candidate_form_tags):
+        if (
+            query_form_tags
+            and candidate_form_tags
+            and not (query_form_tags & candidate_form_tags)
+        ):
             penalty *= 0.6
             rejection_reasons.append("Penalized incompatible ingredient form tags.")
 
@@ -616,7 +670,11 @@ class RecipeMatchingService:
             return False
         for excluded in excluded_normalized:
             for ingredient in recipe_ingredient_set:
-                if excluded == ingredient or excluded in ingredient or ingredient in excluded:
+                if (
+                    excluded == ingredient
+                    or excluded in ingredient
+                    or ingredient in excluded
+                ):
                     return True
         return False
 
@@ -639,7 +697,11 @@ class RecipeMatchingService:
                 return False
             if name == "vegan" and dietary_flags.get("vegan") is not True:
                 return False
-            if name == "quick_meals" and total_minutes is not None and total_minutes > 30:
+            if (
+                name == "quick_meals"
+                and total_minutes is not None
+                and total_minutes > 30
+            ):
                 return False
             if name == "high_protein" and protein_g is not None and protein_g < 15:
                 return False
@@ -647,10 +709,17 @@ class RecipeMatchingService:
                 return False
             if name == "low_sodium" and sodium_mg is not None and sodium_mg > 600:
                 return False
-            if name == "budget_friendly" and total_minutes is not None and total_minutes > 45:
+            if (
+                name == "budget_friendly"
+                and total_minutes is not None
+                and total_minutes > 45
+            ):
                 return False
             if name == "egyptian_foods":
-                tags = [str(tag).strip().lower() for tag in self._ensure_json_list(row.get("tags"))]
+                tags = [
+                    str(tag).strip().lower()
+                    for tag in self._ensure_json_list(row.get("tags"))
+                ]
                 if not any("egypt" in tag for tag in tags):
                     return False
 
@@ -713,7 +782,9 @@ class RecipeMatchingService:
         stable_slug = str(row.get("stable_slug") or "").strip()
         if stable_slug:
             return stable_slug
-        return str(row.get("source_url") or "unknown_recipe").strip() or "unknown_recipe"
+        return (
+            str(row.get("source_url") or "unknown_recipe").strip() or "unknown_recipe"
+        )
 
 
 recipe_matching_service = RecipeMatchingService()

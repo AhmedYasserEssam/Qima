@@ -16,7 +16,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Lab Report Extraction Test'), findsOneWidget);
+    expect(find.text('Scan Lab Report'), findsOneWidget);
     expect(find.text('Pick PDF Report'), findsOneWidget);
     expect(find.text('Pick Lab Report Images'), findsOneWidget);
     expect(find.byKey(const Key('selected-files-preview')), findsOneWidget);
@@ -74,7 +74,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(saveCalled, isTrue);
-    expect(find.text('Lab report saved. Report ID: 42'), findsOneWidget);
+    expect(
+      find.text('Lab results saved to profile. Report ID: 42'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('confirm save shows backend error', (WidgetTester tester) async {

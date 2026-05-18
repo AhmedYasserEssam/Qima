@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 from pathlib import Path
 import time
 from typing import Any
 
-import httpx
 from sqlalchemy import text
 
 from app.core.config import get_settings
@@ -19,10 +17,17 @@ from app.schemas.v1.recipes import (
     GroundingMetadata,
     RecipeCandidate,
     RecipeDiscussResponse,
+    RecipeIngredientPackageSize,
+    RecipeIngredientQuantity,
     SafetyFlags,
 )
-from app.services.exceptions import NotFoundError, UpstreamUnavailableError
+from app.services.exceptions import NotFoundError
 from app.services.recipe_matching_service import recipe_matching_service
+from app.services.recipe_retrieval_service import (
+    ParsedRecipeIngredient,
+    RecipeRecord,
+    recipe_retrieval_service,
+)
 from app.services.recipe_discussion import (
     RecipeDiscussionClient,
     get_recipe_discussion_client,
@@ -30,30 +35,6 @@ from app.services.recipe_discussion import (
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_ALLRECIPES_JSONL = REPO_ROOT / "data" / "Recipes" / "allrecipes_recipes.jsonl"
-OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-
-RECIPE_DISCUSSION_OUTPUT_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["answer"],
-    "properties": {
-        "answer": {
-            "type": "string",
-            "description": "A practical, grounded answer for the user's recipe question.",
-        }
-    },
-}
-
-RECIPE_DISCUSSION_INSTRUCTIONS = (
-    "You are Qima's recipe cooking assistant. Return JSON only, matching the "
-    "provided schema. Answer practical questions about the selected recipe using "
-    "only the supplied recipe context and conversation history. Help the user "
-    "understand how to use the given ingredients, step-by-step preparation, and "
-    "reasonable substitutions. If exact context is missing, say what is unknown "
-    "and give cautious general cooking guidance. Do not provide medical advice, "
-    "diagnose conditions, or claim allergy safety. For allergens or packaged "
-    "ingredients, remind the user to check labels and avoid unsafe substitutions."
-)
 
 
 @dataclass(frozen=True)
@@ -63,108 +44,6 @@ class RecipeSuggestResult:
     debug: dict[str, Any] | None = None
 
 
-class OpenAIRecipeDiscussionClient:
-    def __init__(
-        self,
-        *,
-        api_key: str | None = None,
-        model: str = "gpt-5-nano",
-        timeout_seconds: float = 20.0,
-        base_url: str = OPENAI_RESPONSES_URL,
-        transport: httpx.AsyncBaseTransport | None = None,
-    ) -> None:
-        self._api_key = (api_key or "").strip()
-        self._model = model.strip() or "gpt-5-nano"
-        self._timeout_seconds = timeout_seconds
-        self._base_url = base_url
-        self._transport = transport
-
-    async def generate_answer(self, prompt: str) -> str:
-        if not self._api_key:
-            raise UpstreamUnavailableError(
-                "Recipe discussion service is not configured."
-            )
-
-        payload = {
-            "model": self._model,
-            "instructions": RECIPE_DISCUSSION_INSTRUCTIONS,
-            "input": [
-                {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": prompt}],
-                }
-            ],
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": "recipe_discussion_answer",
-                    "strict": True,
-                    "schema": RECIPE_DISCUSSION_OUTPUT_SCHEMA,
-                }
-            },
-            "max_output_tokens": 900,
-            "store": False,
-        }
-
-        try:
-            async with httpx.AsyncClient(
-                timeout=self._timeout_seconds,
-                transport=self._transport,
-            ) as client:
-                response = await client.post(
-                    self._base_url,
-                    headers={
-                        "Authorization": f"Bearer {self._api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                )
-        except httpx.TimeoutException as exc:
-            raise UpstreamUnavailableError(
-                "Recipe discussion service timed out."
-            ) from exc
-        except httpx.HTTPError as exc:
-            raise UpstreamUnavailableError(
-                "Recipe discussion service is currently unavailable."
-            ) from exc
-
-        if response.status_code >= 400:
-            raise UpstreamUnavailableError(
-                "Recipe discussion service is currently unavailable."
-            )
-
-        try:
-            response_payload = response.json()
-        except ValueError as exc:
-            raise UpstreamUnavailableError(
-                "Recipe discussion service returned invalid JSON."
-            ) from exc
-
-        if response_payload.get("error"):
-            raise UpstreamUnavailableError(
-                "Recipe discussion service is currently unavailable."
-            )
-
-        output_text = _extract_openai_output_text(response_payload)
-        try:
-            parsed = json.loads(output_text)
-        except json.JSONDecodeError as exc:
-            raise UpstreamUnavailableError(
-                "Recipe discussion service returned an invalid structured response."
-            ) from exc
-
-        answer = (
-            str(parsed.get("answer") or "").strip()
-            if isinstance(parsed, dict)
-            else ""
-        )
-        if not answer:
-            raise UpstreamUnavailableError(
-                "Recipe discussion service returned an empty response."
-            )
-        return answer
-
-
 class RecipeService:
     def __init__(
         self,
@@ -172,7 +51,9 @@ class RecipeService:
         discussion_client: RecipeDiscussionClient | None = None,
     ) -> None:
         settings = get_settings()
-        self._discussion_client = discussion_client or get_recipe_discussion_client(settings)
+        self._discussion_client = discussion_client or get_recipe_discussion_client(
+            settings
+        )
         self._initialized = False
 
     def _ensure_initialized(self) -> None:
@@ -210,6 +91,9 @@ class RecipeService:
                     missing_ingredients=scored_recipe.missing_recipe_ingredients,
                     missing_input_ingredients=scored_recipe.missing_input_ingredients,
                     recipe_ingredients_used_for_matching=scored_recipe.matched_recipe_ingredients,
+                    recipe_ingredients=self._recipe_ingredients_from_record(
+                        scored_recipe.recipe
+                    ),
                     exclusions=[],
                     warnings=candidate_warnings,
                     source={
@@ -305,7 +189,9 @@ class RecipeService:
         if row is None:
             raise NotFoundError("Recipe not found in allrecipes dataset.")
 
-        ingredient_names = [display for display, _ in self._recipe_ingredient_names(row)]
+        ingredient_names = [
+            display for display, _ in self._recipe_ingredient_names(row)
+        ]
         matched_preview = ingredient_names[:5]
 
         return RecipeCandidate(
@@ -314,6 +200,7 @@ class RecipeService:
             match_score=1.0,
             matched_ingredients=matched_preview,
             missing_ingredients=[],
+            recipe_ingredients=self._recipe_ingredients_from_row(row),
             exclusions=[],
             warnings=[],
             grounding_metadata=GroundingMetadata(
@@ -323,6 +210,47 @@ class RecipeService:
             ),
         )
 
+    def _recipe_ingredients_from_record(
+        self, recipe: RecipeRecord
+    ) -> list[RecipeIngredientQuantity]:
+        return [
+            self._recipe_ingredient_payload(ingredient)
+            for ingredient in recipe.ingredients
+        ]
+
+    def _recipe_ingredients_from_row(
+        self, row: dict[str, Any]
+    ) -> list[RecipeIngredientQuantity]:
+        return [
+            self._recipe_ingredient_payload(ingredient)
+            for ingredient in recipe_retrieval_service.parse_recipe_ingredients(
+                row.get("ingredients")
+            )
+        ]
+
+    def _recipe_ingredient_payload(
+        self, ingredient: ParsedRecipeIngredient
+    ) -> RecipeIngredientQuantity:
+        package_size = None
+        if ingredient.package_size:
+            package_size = RecipeIngredientPackageSize(
+                quantity=ingredient.package_size.get("quantity"),
+                unit=_optional_text(ingredient.package_size.get("unit")),
+                raw=_optional_text(ingredient.package_size.get("raw")),
+            )
+
+        name = ingredient.display_text.strip() or ingredient.ingredient_name.strip()
+        raw = (ingredient.raw_text or "").strip() or name
+        return RecipeIngredientQuantity(
+            name=name,
+            raw=raw,
+            quantity=ingredient.quantity,
+            unit=ingredient.unit,
+            package_size=package_size,
+            notes=ingredient.notes,
+            modifiers=list(ingredient.modifiers),
+            ingredient_role=ingredient.role,
+        )
 
     def _conversation_history_for_prompt(
         self,
@@ -338,11 +266,7 @@ class RecipeService:
 
     def _allergen_names(self, row: dict[str, Any]) -> list[str]:
         allergen_flags = _ensure_json_list(row.get("allergen_flags"))
-        return [
-            str(item).strip()
-            for item in allergen_flags
-            if str(item).strip()
-        ]
+        return [str(item).strip() for item in allergen_flags if str(item).strip()]
 
     def _discussion_references(
         self,
@@ -435,9 +359,10 @@ class RecipeService:
         where_clause = " OR ".join(where_fragments) if where_fragments else "TRUE"
 
         with SessionLocal() as session:
-            rows = session.execute(
-                text(
-                    f"""
+            rows = (
+                session.execute(
+                    text(
+                        f"""
                     SELECT
                         source_url,
                         source,
@@ -460,9 +385,12 @@ class RecipeService:
                     ORDER BY COALESCE(rating, 0) DESC, COALESCE(review_count, 0) DESC
                     LIMIT :candidate_limit
                     """
-                ),
-                params,
-            ).mappings().all()
+                    ),
+                    params,
+                )
+                .mappings()
+                .all()
+            )
 
         return [dict(row) for row in rows]
 
@@ -500,9 +428,10 @@ class RecipeService:
             source_url_candidate = recipe_id[4:].strip()
 
         with SessionLocal() as session:
-            row = session.execute(
-                text(
-                    """
+            row = (
+                session.execute(
+                    text(
+                        """
                     SELECT
                         source_url,
                         source,
@@ -526,21 +455,25 @@ class RecipeService:
                        OR source_url = :source_url
                     LIMIT 1
                     """
-                ),
-                {
-                    "recipe_id": recipe_id,
-                    "stable_slug": slug_candidate,
-                    "source_url": source_url_candidate,
-                },
-            ).mappings().first()
+                    ),
+                    {
+                        "recipe_id": recipe_id,
+                        "stable_slug": slug_candidate,
+                        "source_url": source_url_candidate,
+                    },
+                )
+                .mappings()
+                .first()
+            )
 
         return dict(row) if row else None
 
     def _find_recipe_by_title(self, title: str) -> dict[str, Any] | None:
         with SessionLocal() as session:
-            row = session.execute(
-                text(
-                    """
+            row = (
+                session.execute(
+                    text(
+                        """
                     SELECT
                         source_url,
                         source,
@@ -564,17 +497,21 @@ class RecipeService:
                     ORDER BY COALESCE(rating, 0) DESC, COALESCE(review_count, 0) DESC
                     LIMIT 1
                     """
-                ),
-                {"title": title, "title_like": f"%{title}%"},
-            ).mappings().first()
+                    ),
+                    {"title": title, "title_like": f"%{title}%"},
+                )
+                .mappings()
+                .first()
+            )
 
         return dict(row) if row else None
 
     def _top_rated_recipe(self) -> dict[str, Any] | None:
         with SessionLocal() as session:
-            row = session.execute(
-                text(
-                    """
+            row = (
+                session.execute(
+                    text(
+                        """
                     SELECT
                         source_url,
                         source,
@@ -596,8 +533,11 @@ class RecipeService:
                     ORDER BY COALESCE(rating, 0) DESC, COALESCE(review_count, 0) DESC
                     LIMIT 1
                     """
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
         return dict(row) if row else None
 
     def _recipe_ingredient_names(self, row: dict[str, Any]) -> list[tuple[str, str]]:
@@ -609,7 +549,9 @@ class RecipeService:
                 continue
             display = (
                 str(item.get("name_normalized") or "").strip()
-                or str(item.get("canonical_ingredient_id") or "").replace("_", " ").strip()
+                or str(item.get("canonical_ingredient_id") or "")
+                .replace("_", " ")
+                .strip()
                 or str(item.get("raw") or "").strip()
             )
             if not display:
@@ -659,7 +601,11 @@ class RecipeService:
             return False
         for excluded in excluded_normalized:
             for ingredient in recipe_ingredient_norm_set:
-                if excluded == ingredient or excluded in ingredient or ingredient in excluded:
+                if (
+                    excluded == ingredient
+                    or excluded in ingredient
+                    or ingredient in excluded
+                ):
                     return True
         return False
 
@@ -682,7 +628,11 @@ class RecipeService:
                 return False
             if name == "vegan" and dietary_flags.get("vegan") is not True:
                 return False
-            if name == "quick_meals" and total_minutes is not None and total_minutes > 30:
+            if (
+                name == "quick_meals"
+                and total_minutes is not None
+                and total_minutes > 30
+            ):
                 return False
             if name == "high_protein" and protein_g is not None and protein_g < 15:
                 return False
@@ -690,10 +640,17 @@ class RecipeService:
                 return False
             if name == "low_sodium" and sodium_mg is not None and sodium_mg > 600:
                 return False
-            if name == "budget_friendly" and total_minutes is not None and total_minutes > 45:
+            if (
+                name == "budget_friendly"
+                and total_minutes is not None
+                and total_minutes > 45
+            ):
                 return False
             if name == "egyptian_foods":
-                tags = [str(tag).strip().lower() for tag in _ensure_json_list(row.get("tags"))]
+                tags = [
+                    str(tag).strip().lower()
+                    for tag in _ensure_json_list(row.get("tags"))
+                ]
                 if not any("egypt" in tag for tag in tags):
                     return False
 
@@ -747,9 +704,9 @@ class RecipeService:
         stable_slug = str(row.get("stable_slug") or "").strip()
         if stable_slug:
             return stable_slug
-        return str(row.get("source_url") or "unknown_recipe").strip() or "unknown_recipe"
-
-
+        return (
+            str(row.get("source_url") or "unknown_recipe").strip() or "unknown_recipe"
+        )
 
 
 def _ensure_json_list(value: Any) -> list[Any]:
@@ -775,6 +732,13 @@ def _to_float(value: Any) -> float | None:
         return float(str(value).strip())
     except ValueError:
         return None
+
+
+def _optional_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text_value = str(value).strip()
+    return text_value or None
 
 
 recipe_service = RecipeService()

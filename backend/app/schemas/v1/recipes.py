@@ -38,6 +38,27 @@ class GroundingMetadata(BaseModel):
     missing_count: int = Field(..., ge=0)
 
 
+class RecipeIngredientPackageSize(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    quantity: float | str | None = None
+    unit: str | None = None
+    raw: str | None = None
+
+
+class RecipeIngredientQuantity(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., min_length=1)
+    raw: str = Field(..., min_length=1)
+    quantity: float | str | None = None
+    unit: str | None = None
+    package_size: RecipeIngredientPackageSize | None = None
+    notes: str | None = None
+    modifiers: list[str] = Field(default_factory=list)
+    ingredient_role: str | None = None
+
+
 class RecipeCandidate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -48,6 +69,7 @@ class RecipeCandidate(BaseModel):
     missing_ingredients: list[str] = Field(default_factory=list)
     missing_input_ingredients: list[str] | None = None
     recipe_ingredients_used_for_matching: list[str] | None = None
+    recipe_ingredients: list[RecipeIngredientQuantity] = Field(default_factory=list)
     exclusions: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     source: dict[str, Any] | None = None

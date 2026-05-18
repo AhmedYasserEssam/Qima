@@ -245,6 +245,34 @@ def test_vision_identify_returns_structured_response(monkeypatch) -> None:
     assert body["source"]["provider"] == "gemini"
 
 
+def test_vision_identify_returns_upstream_reason(monkeypatch) -> None:
+    async def fake_identify_uploaded_food_image(
+        *,
+        image_bytes: bytes,
+        filename: str | None,
+        content_type: str | None,
+        locale: str | None,
+    ) -> None:
+        del image_bytes, filename, content_type, locale
+        raise UpstreamUnavailableError("Vision provider request failed with HTTP 429.")
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.vision.identify_uploaded_food_image",
+        fake_identify_uploaded_food_image,
+    )
+
+    response = client.post(
+        "/v1/vision/identify",
+        files={"image": ("food.jpg", b"mock-image", "image/jpeg")},
+    )
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["error"]["code"] == "UPSTREAM_UNAVAILABLE"
+    assert body["error"]["message"] == "Vision provider request failed with HTTP 429."
+    assert body["error"]["details"]["reason"] == body["error"]["message"]
+
+
 def test_nutrition_estimate_returns_real_xlsx_response() -> None:
     response = client.post(
         "/v1/nutrition/estimate",

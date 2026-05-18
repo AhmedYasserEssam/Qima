@@ -8,13 +8,16 @@ from app.core.config import get_settings
 from app.main import app
 from app.normalizers.ingredient_normalizer import extract_form_tags, normalize_name
 from app.services.ingredient_vocabulary_service import IngredientVocabularyEntry
-from app.services.recipe_matching_service import BaseSemanticProvider, RecipeMatchingService
+from app.services.recipe_matching_service import (
+    BaseSemanticProvider,
+    RecipeMatchingService,
+)
 from app.services.recipe_retrieval_service import (
     ParsedRecipeIngredient,
     RecipeRecord,
     recipe_retrieval_service,
 )
-from app.services.recipe_service import RecipeSuggestResult
+from app.services.recipe_service import RecipeService, RecipeSuggestResult
 
 client = TestClient(app)
 
@@ -63,7 +66,9 @@ def _build_recipe_record(
     )
 
 
-def _patch_match_dependencies(monkeypatch, records: list[RecipeRecord]) -> RecipeMatchingService:
+def _patch_match_dependencies(
+    monkeypatch, records: list[RecipeRecord]
+) -> RecipeMatchingService:
     index_by_name: dict[str, set[int]] = {}
     for idx, record in enumerate(records):
         for ingredient_name in record.ingredient_set:
@@ -137,6 +142,14 @@ def test_recipe_retrieval_parser_supports_multiple_shapes() -> None:
     as_dicts = recipe_retrieval_service.parse_recipe_ingredients(
         [
             {"raw": "2 hamburger buns, split", "name_normalized": "hamburger buns"},
+            {
+                "raw": "1 pound lean ground beef",
+                "name_normalized": "beef",
+                "quantity": 1,
+                "unit": "pound",
+                "modifiers": ["lean", "ground"],
+                "ingredient_role": "main",
+            },
             {"name": "shredded cheddar cheese"},
         ]
     )
@@ -144,9 +157,82 @@ def test_recipe_retrieval_parser_supports_multiple_shapes() -> None:
         '[{"raw":"1 lb lean ground beef"}, "2 hamburger buns, split"]'
     )
 
-    assert [item.normalized_name for item in as_strings] == ["ground beef", "hamburger bun"]
-    assert [item.normalized_name for item in as_dicts] == ["hamburger bun", "cheddar cheese"]
-    assert [item.normalized_name for item in as_json] == ["ground beef", "hamburger bun"]
+    assert [item.normalized_name for item in as_strings] == [
+        "ground beef",
+        "hamburger bun",
+    ]
+    assert [item.normalized_name for item in as_dicts] == [
+        "hamburger bun",
+        "ground beef",
+        "cheddar cheese",
+    ]
+    assert [item.normalized_name for item in as_json] == [
+        "ground beef",
+        "hamburger bun",
+    ]
+    assert as_dicts[1].raw_text == "1 pound lean ground beef"
+    assert as_dicts[1].quantity == 1
+    assert as_dicts[1].unit == "pound"
+    assert as_dicts[1].modifiers == ("lean", "ground")
+    assert as_dicts[1].role == "main"
+
+
+class _NoopDiscussionClient:
+    async def generate_answer(
+        self,
+        *,
+        question: str,
+        recipe_context: dict,
+        match_context: dict,
+        safety_context: dict | None = None,
+    ) -> str:
+        return "unused"
+
+
+def test_recipe_service_candidate_payload_includes_ingredient_quantities() -> None:
+    service = RecipeService(discussion_client=_NoopDiscussionClient())
+    ingredient = ParsedRecipeIngredient(
+        display_text="ground beef",
+        ingredient_name="ground beef",
+        normalized_name="ground beef",
+        form_tags=extract_form_tags("ground beef"),
+        role="main",
+        raw_text="1 pound lean ground beef",
+        quantity=1,
+        unit="pound",
+        package_size={"quantity": 16, "unit": "ounce", "raw": "16 ounce"},
+        notes="lean",
+        modifiers=("lean", "ground"),
+    )
+    record = RecipeRecord(
+        row={
+            "recipe_id": "recipe_1",
+            "title": "Burger Plate",
+            "source": "allrecipes",
+            "source_url": "https://example.com/recipe_1",
+        },
+        ingredients=(ingredient,),
+        ingredient_set=frozenset({"ground beef"}),
+        ingredient_display_by_name={"ground beef": "ground beef"},
+    )
+
+    payload = service._recipe_ingredients_from_record(record)
+
+    assert len(payload) == 1
+    assert payload[0].model_dump(mode="json") == {
+        "name": "ground beef",
+        "raw": "1 pound lean ground beef",
+        "quantity": 1.0,
+        "unit": "pound",
+        "package_size": {
+            "quantity": 16.0,
+            "unit": "ounce",
+            "raw": "16 ounce",
+        },
+        "notes": "lean",
+        "modifiers": ["lean", "ground"],
+        "ingredient_role": "main",
+    }
 
 
 def test_recipe_normalizer_examples() -> None:
@@ -187,8 +273,55 @@ def test_recipe_matching_positive_examples(monkeypatch) -> None:
     assert any("hamburger bun" in value for value in best.matched_recipe_ingredients)
 
 
+def test_exact_ingredient_match_beats_semantic_neighbor(monkeypatch) -> None:
+    class ConfusingSemanticProvider(BaseSemanticProvider):
+        @property
+        def available(self) -> bool:
+            return True
+
+        def query(self, text: str, top_n: int) -> dict[str, float]:
+            del top_n
+            if text == "ground beef":
+                return {"grass-fed ground beef": 0.99, "beef": 0.82}
+            if text == "bread":
+                return {"bread": 1.0}
+            return {}
+
+    records = [
+        _build_recipe_record("recipe_1", "Burger Plate", ["ground beef", "bread"]),
+        _build_recipe_record(
+            "recipe_2",
+            "Premium Beef Plate",
+            ["grass-fed ground beef"],
+        ),
+    ]
+    service = _patch_match_dependencies(monkeypatch, records)
+    service._semantic_provider = ConfusingSemanticProvider()
+
+    result = service.match_and_rank(
+        requested_ingredients=["ground beef", "bread"],
+        dietary_filters=[],
+        excluded_ingredients=[],
+        max_results=3,
+    )
+
+    ground_beef_match = next(
+        match
+        for match in result.ingredient_matches
+        if match.input_ingredient.normalized_name == "ground beef"
+    )
+    assert ground_beef_match.matched_canonical_name == "ground beef"
+    assert result.scored_recipes[0].recipe.row["recipe_id"] == "recipe_1"
+    assert set(result.scored_recipes[0].matched_input_ingredients) == {
+        "ground beef",
+        "bread",
+    }
+
+
 def test_recipe_matching_rejects_milk_chocolate_for_milk(monkeypatch) -> None:
-    records = [_build_recipe_record("recipe_milk_choco", "Chocolate Drink", ["milk chocolate"])]
+    records = [
+        _build_recipe_record("recipe_milk_choco", "Chocolate Drink", ["milk chocolate"])
+    ]
     service = _patch_match_dependencies(monkeypatch, records)
 
     result = service.match_and_rank(
@@ -206,7 +339,9 @@ def test_recipe_matching_rejects_milk_chocolate_for_milk(monkeypatch) -> None:
 
 
 def test_recipe_matching_rejects_rice_pudding_for_rice(monkeypatch) -> None:
-    records = [_build_recipe_record("recipe_rice_pudding", "Rice Pudding", ["rice pudding"])]
+    records = [
+        _build_recipe_record("recipe_rice_pudding", "Rice Pudding", ["rice pudding"])
+    ]
     service = _patch_match_dependencies(monkeypatch, records)
 
     result = service.match_and_rank(
@@ -252,12 +387,16 @@ def test_suggest_endpoint_valid_no_match_returns_200(monkeypatch) -> None:
         "app.api.v1.endpoints.recipes.recipe_service.suggest_recipes",
         lambda **kwargs: RecipeSuggestResult(
             recipes=[],
-            warnings=["No strong recipe matches were found for the supplied ingredients."],
+            warnings=[
+                "No strong recipe matches were found for the supplied ingredients."
+            ],
             debug={"received_ingredients": kwargs.get("requested_ingredients", [])},
         ),
     )
 
-    response = client.post("/v1/recipes/suggest", json={"pantry_items": ["unknown ingredient"]})
+    response = client.post(
+        "/v1/recipes/suggest", json={"pantry_items": ["unknown ingredient"]}
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["recipes"] == []
@@ -269,7 +408,9 @@ def test_suggest_endpoint_debug_is_gated_by_env_and_query(monkeypatch) -> None:
         "app.api.v1.endpoints.recipes.recipe_service.suggest_recipes",
         lambda **kwargs: RecipeSuggestResult(
             recipes=[],
-            warnings=["No strong recipe matches were found for the supplied ingredients."],
+            warnings=[
+                "No strong recipe matches were found for the supplied ingredients."
+            ],
             debug={"received_ingredients": kwargs.get("requested_ingredients", [])},
         ),
     )

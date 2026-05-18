@@ -216,16 +216,22 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const GuidanceScreen(),
           ),
           GoRoute(
-            path: '/chat',
-            builder: (context, state) => const ChatScreen(),
-          ),
-          GoRoute(
             path: '/profile',
             builder: (context, state) => const ProfileScreen(),
           ),
           GoRoute(
             path: '/debug',
             builder: (context, state) => const DebugScreen(),
+          ),
+          GoRoute(
+            path: '/labs/scan',
+            builder: (context, state) => LabReportExtractTestScreen(
+              baseUrl: apiBaseUrl,
+              apiClient: LabReportApiClient(
+                baseUrl: apiBaseUrl,
+                authTokenReader: () => ref.read(authTokenProvider),
+              ),
+            ),
           ),
           GoRoute(
             path: '/labs/extract-report-test',
@@ -949,7 +955,6 @@ class AppShell extends ConsumerWidget {
     ('/recipes', 'Recipes', Icons.restaurant_menu_outlined),
     ('/plan', 'Plan', Icons.event_note_outlined),
     ('/guidance', 'Guidance', Icons.health_and_safety_outlined),
-    ('/chat', 'Chat', Icons.chat_bubble_outline),
   ];
 
   @override
@@ -1360,11 +1365,6 @@ final labsControllerProvider =
     StateNotifierProvider<EndpointController, AsyncValue<ApiPayload>?>(
       (ref) => EndpointController(ref.read(apiClientProvider)),
     );
-final chatControllerProvider =
-    StateNotifierProvider<EndpointController, AsyncValue<ApiPayload>?>(
-      (ref) => EndpointController(ref.read(apiClientProvider)),
-    );
-
 final inventoryControllerProvider =
     StateNotifierProvider<
       InventoryController,
@@ -2150,6 +2150,13 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
                   selectedRecipe!.summary,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
+                if (selectedRecipe!.ingredientQuantitySummary.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    selectedRecipe!.ingredientQuantitySummary,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
                 const SizedBox(height: 12),
               ],
               RecipeChatTranscriptView(turns: recipeChatTranscript),
@@ -2553,6 +2560,30 @@ class RecipeSuggestionPicker extends StatelessWidget {
                                 recipe.summary,
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
+                              if (recipe.recipeIngredients.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    for (final ingredient
+                                        in recipe.recipeIngredients.take(8))
+                                      _IngredientQuantityPill(
+                                        label: ingredient.displayLabel,
+                                      ),
+                                  ],
+                                ),
+                                if (recipe.recipeIngredients.length > 8) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '+${recipe.recipeIngredients.length - 8} more',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: colors.onSurfaceVariant,
+                                        ),
+                                  ),
+                                ],
+                              ],
                             ],
                           ),
                         ),
@@ -2563,6 +2594,32 @@ class RecipeSuggestionPicker extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _IngredientQuantityPill extends StatelessWidget {
+  const _IngredientQuantityPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 220),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Text(
+        label,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.labelSmall,
       ),
     );
   }
@@ -2692,6 +2749,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final profileState = ref.watch(profileControllerProvider);
     final isBusy = loadingProfile || (profileState?.isLoading ?? false);
     final canEdit = !loadingProfile;
+    final labResults = profileLabResultsFromPayload(
+      profileState?.valueOrNull?.raw['lab_results'],
+    );
     return EndpointPage(
       title: 'Profile',
       children: [
@@ -2790,6 +2850,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ],
           ),
         ),
+        ProfileLabResultsCard(
+          results: labResults,
+          onScan: () => context.go('/labs/scan'),
+        ),
         AsyncPayloadView(
           title: 'Current profile',
           value: profileState,
@@ -2819,6 +2883,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 'goal',
                 'safety_screening',
                 'agreement_accepted',
+                'lab_results',
                 'updated_at',
               ],
             ),
@@ -2935,6 +3000,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 'goal',
                 'safety_screening',
                 'agreement_accepted',
+                'lab_results',
                 'updated_at',
               ],
             ),
@@ -2958,6 +3024,69 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   void _setSafetyScreening(String key, bool value) {
     setState(() => updateSafetyScreening(safetyScreening, key, value));
+  }
+}
+
+class ProfileLabResultsCard extends StatelessWidget {
+  const ProfileLabResultsCard({
+    super.key,
+    required this.results,
+    required this.onScan,
+  });
+
+  final List<ProfileLabResultRecord> results;
+  final VoidCallback onScan;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return InputCard(
+      title: 'Latest lab results',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (results.isEmpty)
+            Text(
+              'No saved lab results yet.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            )
+          else
+            for (final result in results)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(result.testName),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(result.resultLabel),
+                    if (result.referenceLabel.isNotEmpty)
+                      Text('Reference: ${result.referenceLabel}'),
+                    if (result.confirmedDateLabel.isNotEmpty)
+                      Text('Saved: ${result.confirmedDateLabel}'),
+                  ],
+                ),
+                trailing: Chip(
+                  label: Text(result.statusLabel),
+                  visualDensity: VisualDensity.compact,
+                  backgroundColor: result.isAbnormal
+                      ? colors.errorContainer
+                      : colors.secondaryContainer,
+                  labelStyle: TextStyle(
+                    color: result.isAbnormal
+                        ? colors.onErrorContainer
+                        : colors.onSecondaryContainer,
+                  ),
+                ),
+              ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: onScan,
+            icon: const Icon(Icons.upload_file_outlined),
+            label: const Text('Scan lab report'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -3429,13 +3558,13 @@ class _GuidanceScreenState extends ConsumerState<GuidanceScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'Upload a lab report PDF or page images and let the backend extract structured lab results.',
+                'Upload a lab report PDF or page images, review the extracted results, then save them to your profile.',
               ),
               const SizedBox(height: 8),
               OutlinedButton.icon(
-                onPressed: () => context.go('/labs/extract-report-test'),
+                onPressed: () => context.go('/labs/scan'),
                 icon: const Icon(Icons.upload_file_outlined),
-                label: const Text('Open extraction test'),
+                label: const Text('Scan lab report'),
               ),
             ],
           ),
@@ -3473,133 +3602,6 @@ class _GuidanceScreenState extends ConsumerState<GuidanceScreen> {
   }
 }
 
-class ChatScreen extends ConsumerStatefulWidget {
-  const ChatScreen({super.key});
-
-  @override
-  ConsumerState<ChatScreen> createState() => _ChatScreenState();
-}
-
-class _ChatScreenState extends ConsumerState<ChatScreen> {
-  final questionController = TextEditingController(
-    text: 'Can you recommend a more price friendly recipe?',
-  );
-  final budgetController = TextEditingController(text: '60');
-  final geographyController = TextEditingController(text: 'Cairo');
-
-  @override
-  void dispose() {
-    questionController.dispose();
-    budgetController.dispose();
-    geographyController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return EndpointPage(
-      title: 'Chat',
-      children: [
-        InputCard(
-          title: 'Grounded question',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextFormField(
-                controller: questionController,
-                minLines: 2,
-                maxLines: 4,
-                decoration: const InputDecoration(labelText: 'Question'),
-              ),
-              TextFormField(
-                controller: budgetController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Budget context EGP',
-                ),
-              ),
-              TextFormField(
-                controller: geographyController,
-                decoration: const InputDecoration(labelText: 'Price geography'),
-              ),
-              const SizedBox(height: 8),
-              FilledButton.icon(
-                onPressed: _ask,
-                icon: const Icon(Icons.send_outlined),
-                label: const Text('Ask'),
-              ),
-            ],
-          ),
-        ),
-        AsyncPayloadView(
-          title: 'Chat response',
-          value: ref.watch(chatControllerProvider),
-          onRetry: _ask,
-        ),
-      ],
-    );
-  }
-
-  void _ask() {
-    final question = questionController.text.trim();
-    final budget = double.tryParse(budgetController.text.trim());
-    final geography = geographyController.text.trim();
-    if (question.isEmpty) {
-      showValidation(context, 'Question is required.');
-      return;
-    }
-    if (budgetController.text.trim().isNotEmpty && budget == null) {
-      showValidation(context, 'Budget context must be a number.');
-      return;
-    }
-    ref
-        .read(chatControllerProvider.notifier)
-        .run(
-          (client) => client.post(
-            '/v1/chat/query',
-            {
-              'context_id': 'ctx_stub_001',
-              'active_context_type': 'recipe_suggestions',
-              'question': question,
-              'food_context': {
-                'budget': priceBudgetContext(
-                  maxTotalCost: budget,
-                  geography: geography,
-                ),
-                'recipes':
-                    ref
-                        .read(recipeControllerProvider)
-                        ?.valueOrNull
-                        ?.raw['recipes'] ??
-                    <Object?>[],
-                'estimated_costs': _estimatedCostsFromLatestRecipes(),
-              },
-            },
-            requiredFields: ['answer', 'source_references', 'safety_flags'],
-          ),
-        );
-  }
-
-  List<Object?> _estimatedCostsFromLatestRecipes() {
-    final recipes = ref
-        .read(recipeControllerProvider)
-        ?.valueOrNull
-        ?.raw['recipes'];
-    if (recipes is! List) {
-      return <Object?>[];
-    }
-    return [
-      for (final recipe in recipes)
-        if (recipe is Map && recipe['estimated_cost'] != null)
-          {
-            'recipe_id': recipe['recipe_id'],
-            'title': recipe['title'],
-            'estimated_cost': recipe['estimated_cost'],
-          },
-    ];
-  }
-}
-
 class DebugScreen extends ConsumerWidget {
   const DebugScreen({super.key});
 
@@ -3620,9 +3622,9 @@ class DebugScreen extends ConsumerWidget {
         Text('API base URL: $apiBaseUrl'),
         const SizedBox(height: 8),
         OutlinedButton.icon(
-          onPressed: () => context.go('/labs/extract-report-test'),
+          onPressed: () => context.go('/labs/scan'),
           icon: const Icon(Icons.science_outlined),
-          label: const Text('Lab report extraction test'),
+          label: const Text('Lab report scan'),
         ),
         AsyncPayloadView(
           title: 'Backend health',
@@ -4972,6 +4974,62 @@ class InventoryImageSelection {
   final List<String> selectedIngredients;
 }
 
+class ProfileLabResultRecord {
+  const ProfileLabResultRecord({
+    required this.reportId,
+    required this.testName,
+    required this.canonicalTestKey,
+    required this.section,
+    required this.resultValue,
+    this.unit,
+    this.referenceRaw,
+    required this.status,
+    this.matchedBand,
+    this.confidence,
+    this.confirmedAt,
+  });
+
+  final int reportId;
+  final String testName;
+  final String canonicalTestKey;
+  final String section;
+  final Object? resultValue;
+  final String? unit;
+  final String? referenceRaw;
+  final String status;
+  final String? matchedBand;
+  final double? confidence;
+  final String? confirmedAt;
+
+  bool get isAbnormal {
+    return status == 'below_range' || status == 'above_range';
+  }
+
+  String get resultLabel {
+    final value = formatIngredientQuantity(resultValue);
+    final display = value.isEmpty ? 'Unavailable' : value;
+    final unitLabel = unit?.trim();
+    if (unitLabel == null || unitLabel.isEmpty) {
+      return 'Result: $display';
+    }
+    return 'Result: $display $unitLabel';
+  }
+
+  String get referenceLabel {
+    final raw = referenceRaw?.trim();
+    return raw ?? '';
+  }
+
+  String get statusLabel {
+    final normalized = status.trim().replaceAll('_', ' ');
+    return normalized.isEmpty ? 'indeterminate' : normalized;
+  }
+
+  String get confirmedDateLabel {
+    return formatIsoDate(confirmedAt);
+  }
+}
+
 class RecipeSuggestionRecord {
   const RecipeSuggestionRecord({
     required this.recipeId,
@@ -4979,6 +5037,7 @@ class RecipeSuggestionRecord {
     required this.matchScore,
     required this.matchedIngredients,
     required this.missingIngredients,
+    this.recipeIngredients = const [],
   });
 
   final String recipeId;
@@ -4986,6 +5045,7 @@ class RecipeSuggestionRecord {
   final double? matchScore;
   final List<String> matchedIngredients;
   final List<String> missingIngredients;
+  final List<RecipeIngredientQuantityRecord> recipeIngredients;
 
   String get summary {
     final parts = <String>[];
@@ -5000,6 +5060,67 @@ class RecipeSuggestionRecord {
     }
     return parts.isEmpty ? recipeId : parts.join(' | ');
   }
+
+  String get ingredientQuantitySummary {
+    if (recipeIngredients.isEmpty) {
+      return '';
+    }
+    return recipeIngredients
+        .take(8)
+        .map((ingredient) => ingredient.displayLabel)
+        .join(', ');
+  }
+}
+
+class RecipeIngredientQuantityRecord {
+  const RecipeIngredientQuantityRecord({
+    required this.name,
+    required this.raw,
+    this.quantity,
+    this.unit,
+    this.packageQuantity,
+    this.packageUnit,
+    this.notes,
+  });
+
+  final String name;
+  final String raw;
+  final Object? quantity;
+  final String? unit;
+  final Object? packageQuantity;
+  final String? packageUnit;
+  final String? notes;
+
+  String get quantityLabel {
+    final amount = formatIngredientQuantity(quantity);
+    if (amount.isEmpty) {
+      return '';
+    }
+    final unitLabel = unit?.trim();
+    if (unitLabel == null || unitLabel.isEmpty) {
+      return amount;
+    }
+    return '$amount ${formatIngredientUnit(unitLabel, quantity)}';
+  }
+
+  String get packageLabel {
+    final amount = formatIngredientQuantity(packageQuantity);
+    final unitLabel = packageUnit?.trim();
+    if (amount.isEmpty || unitLabel == null || unitLabel.isEmpty) {
+      return '';
+    }
+    return '$amount $unitLabel package';
+  }
+
+  String get displayLabel {
+    final amount = quantityLabel;
+    final base = amount.isEmpty ? name : '$amount $name';
+    final package = packageLabel;
+    if (package.isEmpty) {
+      return base;
+    }
+    return '$base ($package)';
+  }
 }
 
 class RecipeChatTurn {
@@ -5011,6 +5132,52 @@ class RecipeChatTurn {
   Map<String, Object?> toRequestBody() {
     return {'role': role, 'content': content};
   }
+}
+
+List<ProfileLabResultRecord> profileLabResultsFromPayload(Object? rawResults) {
+  if (rawResults is! List) {
+    return const [];
+  }
+
+  final results = <ProfileLabResultRecord>[];
+  for (final item in rawResults) {
+    if (item is! Map) {
+      continue;
+    }
+    final reportId = _asInt(item['report_id']);
+    final testName = text(item['test_name'], fallback: '').trim();
+    final canonicalKey = text(item['canonical_test_key'], fallback: '').trim();
+    final status = text(item['status'], fallback: 'indeterminate').trim();
+    if (reportId == null || testName.isEmpty || canonicalKey.isEmpty) {
+      continue;
+    }
+
+    String? referenceRaw;
+    final reference = item['reference_interval'];
+    if (reference is Map) {
+      final rawReference = text(reference['raw'], fallback: '').trim();
+      referenceRaw = rawReference.isEmpty ? null : rawReference;
+    }
+    final unit = text(item['unit'], fallback: '').trim();
+    final matchedBand = text(item['matched_band'], fallback: '').trim();
+    final confirmedAt = text(item['confirmed_at'], fallback: '').trim();
+    results.add(
+      ProfileLabResultRecord(
+        reportId: reportId,
+        testName: testName,
+        canonicalTestKey: canonicalKey,
+        section: text(item['section'], fallback: 'unknown').trim(),
+        resultValue: item['result_value'],
+        unit: unit.isEmpty ? null : unit,
+        referenceRaw: referenceRaw,
+        status: status.isEmpty ? 'indeterminate' : status,
+        matchedBand: matchedBand.isEmpty ? null : matchedBand,
+        confidence: number(item['confidence']),
+        confirmedAt: confirmedAt.isEmpty ? null : confirmedAt,
+      ),
+    );
+  }
+  return results;
 }
 
 List<InventoryItemRecord> inventoryItemsFromPayload(Map<String, Object?> raw) {
@@ -5173,10 +5340,62 @@ List<RecipeSuggestionRecord> recipeSuggestionsFromPayload(
         matchScore: number(item['match_score']),
         matchedIngredients: textList(item['matched_ingredients']),
         missingIngredients: textList(item['missing_ingredients']),
+        recipeIngredients: recipeIngredientQuantitiesFromPayload(
+          item['recipe_ingredients'],
+        ),
       ),
     );
   }
   return recipes;
+}
+
+List<RecipeIngredientQuantityRecord> recipeIngredientQuantitiesFromPayload(
+  Object? rawIngredients,
+) {
+  if (rawIngredients is! List) {
+    return const [];
+  }
+
+  final ingredients = <RecipeIngredientQuantityRecord>[];
+  for (final item in rawIngredients) {
+    if (item is! Map) {
+      continue;
+    }
+    final name = text(
+      item['name'] ??
+          item['name_normalized'] ??
+          item['ingredient'] ??
+          item['raw'],
+      fallback: '',
+    ).trim();
+    if (name.isEmpty) {
+      continue;
+    }
+
+    final packageSize = item['package_size'];
+    Object? packageQuantity;
+    String? packageUnit;
+    if (packageSize is Map) {
+      packageQuantity = packageSize['quantity'];
+      final parsedPackageUnit = text(packageSize['unit'], fallback: '').trim();
+      packageUnit = parsedPackageUnit.isEmpty ? null : parsedPackageUnit;
+    }
+
+    final parsedUnit = text(item['unit'], fallback: '').trim();
+    final parsedNotes = text(item['notes'], fallback: '').trim();
+    ingredients.add(
+      RecipeIngredientQuantityRecord(
+        name: name,
+        raw: text(item['raw'], fallback: name).trim(),
+        quantity: item['quantity'],
+        unit: parsedUnit.isEmpty ? null : parsedUnit,
+        packageQuantity: packageQuantity,
+        packageUnit: packageUnit,
+        notes: parsedNotes.isEmpty ? null : parsedNotes,
+      ),
+    );
+  }
+  return ingredients;
 }
 
 Map<String, Object?> buildRecipeDiscussRequestBody({
@@ -5835,6 +6054,64 @@ String formatNutritionNumber(double value, {required int decimals}) {
     return rounded;
   }
   return rounded.replaceFirst(RegExp(r'\.?0+$'), '');
+}
+
+String formatIngredientQuantity(Object? value) {
+  if (value == null) {
+    return '';
+  }
+  final parsedNumber = number(value);
+  if (parsedNumber != null) {
+    final decimals = parsedNumber == parsedNumber.roundToDouble() ? 0 : 2;
+    return formatNutritionNumber(parsedNumber, decimals: decimals);
+  }
+  return text(value, fallback: '').trim();
+}
+
+String formatIngredientUnit(String unit, Object? quantity) {
+  final trimmed = unit.trim();
+  final parsedQuantity = number(quantity);
+  if (parsedQuantity == null || parsedQuantity <= 1) {
+    return trimmed;
+  }
+
+  const irregular = {
+    'bunch': 'bunches',
+    'dish': 'dishes',
+    'leaf': 'leaves',
+    'loaf': 'loaves',
+    'pinch': 'pinches',
+    'piece': 'pieces',
+  };
+  final normalized = trimmed.toLowerCase();
+  if (trimmed.endsWith('s')) {
+    return trimmed;
+  }
+  final irregularUnit = irregular[normalized];
+  if (irregularUnit != null) {
+    return irregularUnit;
+  }
+  if (normalized.endsWith('ch') ||
+      normalized.endsWith('sh') ||
+      normalized.endsWith('x')) {
+    return '${trimmed}es';
+  }
+  return '${trimmed}s';
+}
+
+String formatIsoDate(String? value) {
+  final raw = value?.trim();
+  if (raw == null || raw.isEmpty) {
+    return '';
+  }
+  final parsed = DateTime.tryParse(raw);
+  if (parsed == null) {
+    return raw;
+  }
+  final local = parsed.toLocal();
+  final month = local.month.toString().padLeft(2, '0');
+  final day = local.day.toString().padLeft(2, '0');
+  return '${local.year}-$month-$day';
 }
 
 String? formatIngredientsSummary(Object? rawIngredients) {

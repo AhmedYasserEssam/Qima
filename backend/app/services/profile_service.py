@@ -3,11 +3,18 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.db import SessionLocal, init_db
+from app.models.lab_report import LabReport, LabReportTest
 from app.models.nutrition_profile import NutritionProfile
 from app.models.user import User
-from app.schemas.v1.profile import NutritionProfileCreateUpdate, NutritionProfileResponse
+from app.schemas.v1.lab_report import LabReportReferenceInterval
+from app.schemas.v1.profile import (
+    NutritionProfileCreateUpdate,
+    NutritionProfileResponse,
+    ProfileLabResult,
+)
 from app.services.exceptions import NotFoundError
 
 
@@ -21,7 +28,12 @@ def _naive_to_utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC)
 
 
-def _profile_response(*, user_id: int, profile: NutritionProfile) -> NutritionProfileResponse:
+def _profile_response(
+    *,
+    user_id: int,
+    profile: NutritionProfile,
+    lab_results: list[ProfileLabResult] | None = None,
+) -> NutritionProfileResponse:
     return NutritionProfileResponse(
         user_id=user_id,
         age=profile.age,
@@ -43,7 +55,59 @@ def _profile_response(*, user_id: int, profile: NutritionProfile) -> NutritionPr
             "none_of_above": True,
         },
         agreement_accepted=profile.agreement_accepted,
+        lab_results=lab_results or [],
         updated_at=_naive_to_utc(profile.updated_at),
+    )
+
+
+def _latest_lab_results_for_user(
+    session: Session, *, user_id: int
+) -> list[ProfileLabResult]:
+    rows = session.execute(
+        select(LabReport, LabReportTest)
+        .join(LabReportTest, LabReportTest.lab_report_id == LabReport.id)
+        .where(LabReport.user_id == user_id)
+        .order_by(
+            LabReport.confirmed_at.desc(),
+            LabReport.id.desc(),
+            LabReportTest.id.desc(),
+        )
+    ).all()
+
+    latest_by_key: list[ProfileLabResult] = []
+    seen_keys: set[str] = set()
+    for report, test in rows:
+        key = str(test.canonical_test_key or "").strip()
+        if not key or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        latest_by_key.append(_lab_result_response(report=report, test=test))
+    return latest_by_key
+
+
+def _lab_result_response(*, report: LabReport, test: LabReportTest) -> ProfileLabResult:
+    result_value: float | str | None = test.result_value_numeric
+    if result_value is None:
+        result_value = test.result_value_text
+    return ProfileLabResult(
+        report_id=report.id,
+        test_name=test.test_name,
+        canonical_test_key=test.canonical_test_key,
+        section=test.section,
+        result_value=result_value,
+        unit=test.unit,
+        reference_interval=LabReportReferenceInterval(
+            raw=test.reference_interval_raw,
+            type=test.reference_interval_type,
+            low=test.reference_low,
+            high=test.reference_high,
+            operator=test.reference_operator,
+            bands=test.reference_bands or [],
+        ),
+        status=test.status,
+        matched_band=test.matched_band,
+        confidence=test.confidence,
+        confirmed_at=_naive_to_utc(report.confirmed_at),
     )
 
 
@@ -103,7 +167,11 @@ class ProfileService:
                 profile.updated_at = now
                 session.flush()
 
-            response = _profile_response(user_id=user.id, profile=profile)
+            response = _profile_response(
+                user_id=user.id,
+                profile=profile,
+                lab_results=_latest_lab_results_for_user(session, user_id=user.id),
+            )
         return response
 
     def get_my_profile(self, *, user: User) -> NutritionProfileResponse:
@@ -113,12 +181,16 @@ class ProfileService:
                 select(NutritionProfile).where(NutritionProfile.user_id == user.id)
             ).scalar_one_or_none()
 
-        if profile is None:
-            raise NotFoundError(
-                "Profile not found. Complete onboarding by calling POST /v1/profile/update first."
-            )
+            if profile is None:
+                raise NotFoundError(
+                    "Profile not found. Complete onboarding by calling POST /v1/profile/update first."
+                )
 
-        return _profile_response(user_id=user.id, profile=profile)
+            return _profile_response(
+                user_id=user.id,
+                profile=profile,
+                lab_results=_latest_lab_results_for_user(session, user_id=user.id),
+            )
 
 
 profile_service = ProfileService()

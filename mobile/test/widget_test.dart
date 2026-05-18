@@ -353,6 +353,21 @@ void main() {
           'match_score': 0.82,
           'matched_ingredients': ['lentils', 'tomato'],
           'missing_ingredients': ['butter'],
+          'recipe_ingredients': [
+            {
+              'name': 'lentils',
+              'raw': '1 cup dry lentils',
+              'quantity': 1,
+              'unit': 'cup',
+            },
+            {
+              'name': 'tomatoes',
+              'raw': '1 (14.5 ounce) can diced tomatoes',
+              'quantity': 1,
+              'unit': 'can',
+              'package_size': {'quantity': 14.5, 'unit': 'ounce'},
+            },
+          ],
         },
       ],
     });
@@ -363,6 +378,78 @@ void main() {
     expect(recipes.first.matchedIngredients, ['lentils', 'tomato']);
     expect(recipes.first.missingIngredients, ['butter']);
     expect(recipes.first.summary, contains('Match 82%'));
+    expect(recipes.first.recipeIngredients, hasLength(2));
+    expect(recipes.first.recipeIngredients.first.displayLabel, '1 cup lentils');
+    expect(
+      recipes.first.recipeIngredients.last.displayLabel,
+      '1 can tomatoes (14.5 ounce package)',
+    );
+    expect(
+      recipes.first.ingredientQuantitySummary,
+      '1 cup lentils, 1 can tomatoes (14.5 ounce package)',
+    );
+
+    const bread = RecipeIngredientQuantityRecord(
+      name: 'bread',
+      raw: '3 slices bread',
+      quantity: 3,
+      unit: 'slice',
+    );
+    expect(bread.displayLabel, '3 slices bread');
+  });
+
+  testWidgets('profile lab results card renders empty state and scan action', (
+    WidgetTester tester,
+  ) async {
+    var scanTapped = false;
+
+    await tester.pumpWidget(
+      _wrap(
+        ProfileLabResultsCard(
+          results: const [],
+          onScan: () {
+            scanTapped = true;
+          },
+        ),
+      ),
+    );
+
+    expect(find.text('Latest lab results'), findsOneWidget);
+    expect(find.text('No saved lab results yet.'), findsOneWidget);
+
+    await tester.tap(find.text('Scan lab report'));
+    expect(scanTapped, isTrue);
+  });
+
+  testWidgets('profile lab results card renders latest marker details', (
+    WidgetTester tester,
+  ) async {
+    final results = profileLabResultsFromPayload([
+      {
+        'report_id': 42,
+        'test_name': 'Calcium (Total), Serum',
+        'canonical_test_key': 'calcium_total_serum',
+        'section': 'chemistry',
+        'result_value': 9.6,
+        'unit': 'mg/dL',
+        'reference_interval': {'raw': '8.8 - 10.6'},
+        'status': 'within_range',
+        'matched_band': null,
+        'confidence': 0.91,
+        'confirmed_at': '2026-05-18T10:15:30Z',
+      },
+    ]);
+
+    await tester.pumpWidget(
+      _wrap(ProfileLabResultsCard(results: results, onScan: () {})),
+    );
+
+    expect(results, hasLength(1));
+    expect(results.first.resultLabel, 'Result: 9.6 mg/dL');
+    expect(find.text('Calcium (Total), Serum'), findsOneWidget);
+    expect(find.text('Result: 9.6 mg/dL'), findsOneWidget);
+    expect(find.text('Reference: 8.8 - 10.6'), findsOneWidget);
+    expect(find.text('within range'), findsOneWidget);
   });
 
   test(
