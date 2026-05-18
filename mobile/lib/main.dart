@@ -26,7 +26,7 @@ void main() {
 
 const _configuredApiBaseUrl = String.fromEnvironment('QIMA_API_BASE_URL');
 
-String get apiBaseUrl {
+String get defaultApiBaseUrl {
   if (_configuredApiBaseUrl.isNotEmpty) {
     return _configuredApiBaseUrl;
   }
@@ -36,9 +36,12 @@ String get apiBaseUrl {
   return 'http://127.0.0.1:8000';
 }
 
+final apiBaseUrlProvider = StateProvider<String>((ref) => defaultApiBaseUrl);
+
 final apiClientProvider = Provider<ApiClient>((ref) {
+  final baseUrl = ref.watch(apiBaseUrlProvider);
   return ApiClient(
-    baseUrl: apiBaseUrl,
+    baseUrl: baseUrl,
     client: http.Client(),
     authTokenReader: () => ref.read(authTokenProvider),
   );
@@ -157,6 +160,7 @@ final healthProvider = FutureProvider<ApiPayload>((ref) async {
 final routerProvider = Provider<GoRouter>((ref) {
   final bootstrapped = ref.watch(authBootstrappedProvider);
   final authStage = ref.watch(authStageProvider);
+  final baseUrl = ref.watch(apiBaseUrlProvider);
   return GoRouter(
     initialLocation: '/splash',
     redirect: (context, state) {
@@ -226,9 +230,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/labs/scan',
             builder: (context, state) => LabReportExtractTestScreen(
-              baseUrl: apiBaseUrl,
+              baseUrl: baseUrl,
               apiClient: LabReportApiClient(
-                baseUrl: apiBaseUrl,
+                baseUrl: baseUrl,
                 authTokenReader: () => ref.read(authTokenProvider),
               ),
             ),
@@ -236,9 +240,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/labs/extract-report-test',
             builder: (context, state) => LabReportExtractTestScreen(
-              baseUrl: apiBaseUrl,
+              baseUrl: baseUrl,
               apiClient: LabReportApiClient(
-                baseUrl: apiBaseUrl,
+                baseUrl: baseUrl,
                 authTokenReader: () => ref.read(authTokenProvider),
               ),
             ),
@@ -1044,17 +1048,18 @@ class ApiClient {
     String path, {
     required List<String> requiredFields,
   }) async {
+    final uri = _uri(path);
     try {
       final response = await client
-          .get(_uri(path), headers: _headers())
+          .get(uri, headers: _headers())
           .timeout(requestTimeout);
       return _parseResponse(response, requiredFields);
     } on ApiFailure {
       rethrow;
     } on TimeoutException {
-      throw ApiFailure.timeout(requestTimeout);
+      throw ApiFailure.timeout(requestTimeout, uri: uri);
     } on Exception catch (error) {
-      throw ApiFailure.network(error.toString());
+      throw ApiFailure.network(error.toString(), uri: uri);
     }
   }
 
@@ -1064,10 +1069,11 @@ class ApiClient {
     required List<String> requiredFields,
     Duration timeout = requestTimeout,
   }) async {
+    final uri = _uri(path);
     try {
       final response = await client
           .post(
-            _uri(path),
+            uri,
             headers: _headers(includeJsonContentType: true),
             body: jsonEncode(body),
           )
@@ -1076,9 +1082,9 @@ class ApiClient {
     } on ApiFailure {
       rethrow;
     } on TimeoutException {
-      throw ApiFailure.timeout(timeout);
+      throw ApiFailure.timeout(timeout, uri: uri);
     } on Exception catch (error) {
-      throw ApiFailure.network(error.toString());
+      throw ApiFailure.network(error.toString(), uri: uri);
     }
   }
 
@@ -1086,17 +1092,18 @@ class ApiClient {
     String path, {
     required List<String> requiredFields,
   }) async {
+    final uri = _uri(path);
     try {
       final response = await client
-          .delete(_uri(path), headers: _headers())
+          .delete(uri, headers: _headers())
           .timeout(requestTimeout);
       return _parseResponse(response, requiredFields);
     } on ApiFailure {
       rethrow;
     } on TimeoutException {
-      throw ApiFailure.timeout(requestTimeout);
+      throw ApiFailure.timeout(requestTimeout, uri: uri);
     } on Exception catch (error) {
-      throw ApiFailure.network(error.toString());
+      throw ApiFailure.network(error.toString(), uri: uri);
     }
   }
 
@@ -1105,9 +1112,10 @@ class ApiClient {
     XFile image, {
     required List<String> requiredFields,
   }) async {
+    final uri = _uri(path);
     try {
       final imageBytes = await image.readAsBytes();
-      final request = http.MultipartRequest('POST', _uri(path))
+      final request = http.MultipartRequest('POST', uri)
         ..headers.addAll(_headers())
         ..fields['locale'] = 'en'
         ..files.add(
@@ -1123,9 +1131,9 @@ class ApiClient {
     } on ApiFailure {
       rethrow;
     } on TimeoutException {
-      throw ApiFailure.timeout(uploadTimeout);
+      throw ApiFailure.timeout(uploadTimeout, uri: uri);
     } on Exception catch (error) {
-      throw ApiFailure.network(error.toString());
+      throw ApiFailure.network(error.toString(), uri: uri);
     }
   }
 
@@ -1189,19 +1197,21 @@ class ApiFailure implements Exception {
     this.details,
   });
 
-  factory ApiFailure.network(String details) {
+  factory ApiFailure.network(String details, {Uri? uri}) {
+    final target = uri == null ? '' : ' Target: ${uri.origin}.';
     return ApiFailure(
-      message: 'Could not reach the FastAPI backend.',
+      message: 'Could not reach the FastAPI backend.$target',
       retryable: true,
       code: 'NETWORK_ERROR',
       details: details,
     );
   }
 
-  factory ApiFailure.timeout(Duration timeout) {
+  factory ApiFailure.timeout(Duration timeout, {Uri? uri}) {
+    final target = uri == null ? 'the configured backend' : uri.origin;
     return ApiFailure(
       message:
-          'The FastAPI backend took too long to respond. It may still be warming up.',
+          'The FastAPI backend at $target took too long to respond. Open $target/v1/health on this phone to confirm it is reachable.',
       retryable: true,
       code: 'TIMEOUT',
       details: 'Request timed out after $timeout.',
@@ -3686,6 +3696,7 @@ class DebugScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final health = ref.watch(healthProvider);
     final debug = ref.watch(debugModeProvider);
+    final baseUrl = ref.watch(apiBaseUrlProvider);
     return EndpointPage(
       title: 'Debug and health',
       children: [
@@ -3696,7 +3707,7 @@ class DebugScreen extends ConsumerWidget {
           onChanged: (value) =>
               ref.read(debugModeProvider.notifier).state = value,
         ),
-        Text('API base URL: $apiBaseUrl'),
+        Text('API base URL: $baseUrl'),
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: () => context.go('/labs/scan'),
@@ -5287,9 +5298,9 @@ List<ProfileLabResultRecord> profileLabResultsFromPayload(Object? rawResults) {
 List<ProfileLabResultRecord> planBelowRangeLabMarkersFromPayload(
   Object? rawResults,
 ) {
-  return profileLabResultsFromPayload(rawResults)
-      .where((result) => result.status == 'below_range')
-      .toList();
+  return profileLabResultsFromPayload(
+    rawResults,
+  ).where((result) => result.status == 'below_range').toList();
 }
 
 List<ProfileLabResultRecord> unsupportedPlanLabMarkers(
@@ -5298,9 +5309,7 @@ List<ProfileLabResultRecord> unsupportedPlanLabMarkers(
   return markers.where((marker) => !isSupportedPlanLabMarker(marker)).toList();
 }
 
-Map<String, Object?> planLabMarkerRequestBody(
-  ProfileLabResultRecord marker,
-) {
+Map<String, Object?> planLabMarkerRequestBody(ProfileLabResultRecord marker) {
   return {
     'report_id': marker.reportId,
     'test_name': marker.testName,

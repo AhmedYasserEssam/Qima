@@ -22,6 +22,10 @@ secrets.*
 backend/.env
 Environment/.env
 .docx_inspect/
+.codex-logs/
+.metals/
+.DS_Store
+Thumbs.db
 .venv/
 __pycache__/
 *.pyc
@@ -29,6 +33,10 @@ __pycache__/
 pytest-cache-files-*/
 .ruff_cache/
 *.log
+*.sqlite
+*.sqlite3
+*.db
+local.db
 
 # IDE/editor
 .idea/
