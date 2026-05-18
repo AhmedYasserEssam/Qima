@@ -368,6 +368,11 @@
             "type": "string",
             "minLength": 1
           }
+        },
+        "generated_plan": {
+          "type": ["object", "null"],
+          "description": "Raw OpenAI-generated diet plan JSON when LLM generation succeeds. Null when generation is unavailable or the profile is unsupported.",
+          "additionalProperties": true
         }
       }
     },

@@ -24,6 +24,7 @@ pgvector>=0.3,<1.0
 scrapling[fetchers]>=0.4.7,<0.5
 groq
 python-dotenv
+openai
 opendataloader-pdf>=0.1
 paddleocr>=3.0,<4.0
 paddlepaddle>=3.0,<4.0

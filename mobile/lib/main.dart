@@ -1014,6 +1014,7 @@ class ApiClient {
 
   static const requestTimeout = Duration(seconds: 12);
   static const recipeTimeout = Duration(seconds: 60);
+  static const planTimeout = Duration(seconds: 120);
   static const uploadTimeout = Duration(seconds: 45);
 
   final String baseUrl;
@@ -3191,6 +3192,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
           (client) => client.post(
             '/v1/plans/generate',
             body,
+            timeout: ApiClient.planTimeout,
             requiredFields: [
               'plan_id',
               'support_status',
@@ -5640,6 +5642,7 @@ Map<String, String> summarizePayload(Map<String, Object?> raw) {
   final friendlyNutrition = formatNutritionSummary(rawNutrition);
   final friendlyIngredients = formatIngredientsSummary(raw['ingredients']);
   final friendlyAllergens = formatAllergensSummary(raw['allergens']);
+  final friendlyPlan = formatPlanSummary(raw);
 
   add('Status', raw['status']);
   add('Product', raw['name']);
@@ -5656,7 +5659,11 @@ Map<String, String> summarizePayload(Map<String, Object?> raw) {
   add('Profile id', raw['profile_id']);
   add('Support status', raw['support_status']);
   add('Plan id', raw['plan_id']);
-  add('Meals', raw['meals']);
+  if (friendlyPlan != null) {
+    add('Plan', friendlyPlan);
+  } else {
+    add('Meals', raw['meals']);
+  }
   add('Rationale', raw['rationale']);
   add('Price items', raw['item_costs']);
   add('Marker result', raw['marker']);
@@ -5731,6 +5738,95 @@ String? formatNutritionSummary(Object? rawNutrition) {
   addNutrient('salt_g', 'Salt', decimals: 2);
 
   return lines.isEmpty ? null : lines.join('\n');
+}
+
+String? formatPlanSummary(Map<String, Object?> raw) {
+  final generatedPlan = raw['generated_plan'];
+  if (generatedPlan is Map) {
+    final formattedMessage = text(
+      generatedPlan['formatted_message'],
+      fallback: '',
+    ).trim();
+    if (formattedMessage.isNotEmpty) {
+      return formattedMessage;
+    }
+  }
+
+  final meals = raw['meals'];
+  if (meals is! List || meals.isEmpty) {
+    return null;
+  }
+
+  final lines = <String>[];
+  final target = raw['nutrition_targets'];
+  if (target is Map) {
+    final calories = target['calories_kcal'];
+    final basis = text(target['target_basis'], fallback: '').trim();
+    if (calories != null) {
+      final label = basis.isEmpty ? '' : ' ($basis)';
+      lines.add('Daily target: ${displayValue(calories)} kcal$label');
+    }
+  }
+
+  for (var index = 0; index < meals.length; index += 1) {
+    final meal = meals[index];
+    if (meal is! Map) {
+      continue;
+    }
+
+    final title = text(meal['title'], fallback: 'Meal ${index + 1}').trim();
+    final type = titleCase(text(meal['meal_type'], fallback: 'meal'));
+    lines.add('${index + 1}. $type: $title');
+
+    final details = <String>[];
+    final nutrition = meal['estimated_nutrition'];
+    if (nutrition is Map && nutrition['calories_kcal'] != null) {
+      details.add('${displayValue(nutrition['calories_kcal'])} kcal');
+    }
+
+    final cost = meal['estimated_cost'];
+    if (cost is Map) {
+      final totalCost = cost['total_cost'];
+      final currency = text(cost['currency'], fallback: 'EGP');
+      final quality = text(cost['estimate_quality'], fallback: '').trim();
+      if (totalCost != null) {
+        final qualityLabel = quality.isEmpty ? '' : ' | $quality';
+        details.add('$currency ${displayValue(totalCost)}$qualityLabel');
+      }
+    }
+
+    if (details.isNotEmpty) {
+      lines.add('   ${details.join(' | ')}');
+    }
+
+    final matched = _compactStringList(meal['matched_ingredients']);
+    if (matched.isNotEmpty) {
+      lines.add('   Uses: ${matched.join(', ')}');
+    }
+
+    final missing = _compactStringList(meal['missing_ingredients']);
+    if (missing.isNotEmpty) {
+      lines.add('   Need: ${missing.join(', ')}');
+    }
+
+    final warnings = _compactStringList(meal['warnings']);
+    if (warnings.isNotEmpty) {
+      lines.add('   Notes: ${warnings.join(' ')}');
+    }
+  }
+
+  return lines.isEmpty ? null : lines.join('\n');
+}
+
+List<String> _compactStringList(Object? value) {
+  if (value is! List) {
+    return const [];
+  }
+
+  return value
+      .map((item) => text(item, fallback: '').trim())
+      .where((item) => item.isNotEmpty)
+      .toList();
 }
 
 String formatNutritionNumber(double value, {required int decimals}) {

@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 
 from app.schemas.v1.plans import (
     DataQuality,
@@ -15,6 +16,8 @@ from app.schemas.v1.plans import (
     Source,
     SupportStatus,
 )
+from app.services.exceptions import BadRequestError, UpstreamUnavailableError
+from app.services.plan_service import generate_plan_from_request
 
 router = APIRouter()
 
@@ -25,17 +28,18 @@ router = APIRouter()
     summary="Generate bounded goal-based meal guidance",
 )
 async def generate_plan(payload: PlansGenerateRequest) -> PlansGenerateSuccess:
-    if payload.safety_checks is not None and payload.safety_checks.has_exclusion:
-        return _mock_plan_response(
-            plan_id="plan_stub_001",
-            matched_ingredients=[item.name for item in payload.pantry or []],
-            supported=False,
-        )
-
-    return _mock_plan_response(
-        plan_id="plan_stub_001",
-        matched_ingredients=[item.name for item in payload.pantry or []],
-    )
+    try:
+        return await run_in_threadpool(generate_plan_from_request, payload)
+    except BadRequestError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except UpstreamUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get("/{plan_id}", response_model=PlansGenerateSuccess)

@@ -1,38 +1,15 @@
 import json
 import os
-import sys
 from pathlib import Path
 from typing import Any, Literal
 
 from dotenv import load_dotenv
-from groq import Groq
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from openai import OpenAI
+from pydantic import BaseModel, Field, model_validator
 
 
 BASE_DIR = Path(__file__).resolve().parent
-BACKEND_DIR = BASE_DIR / "backend"
-DEFAULT_CARREFOUR_PRODUCTS_CSV = (
-    BASE_DIR / "data" / "Food" / "carrefour_test.csv"
-)
-CARREFOUR_PRODUCTS_CSV_ENV = "CARREFOUR_PRODUCTS_CSV"
 
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
-
-try:
-    from backend.scripts.estimate_recipe_prices import (
-        estimate_ingredient_cost,
-        prepare_products,
-    )
-except Exception:  # pragma: no cover - keeps non-pricing usage importable.
-    estimate_ingredient_cost = None
-    prepare_products = None
-
-_CARREFOUR_PRODUCTS_CACHE: dict[Path, Any] = {}
-
-# Load .env from either:
-# 1) Qima/.env
-# 2) Qima/backend/.env
 root_env = BASE_DIR / ".env"
 backend_env = BASE_DIR / "backend" / ".env"
 
@@ -44,8 +21,12 @@ else:
     load_dotenv()
 
 
-class GroqLLMError(Exception):
-    """Raised when the Groq LLM call fails."""
+class OpenAILLMError(Exception):
+    """Raised when the OpenAI LLM call or JSON parsing fails."""
+
+
+# Backward-compatible alias in case other files still import GroqLLMError.
+GroqLLMError = OpenAILLMError
 
 
 class DietPlanSpecs(BaseModel):
@@ -75,7 +56,7 @@ class DietPlanSpecs(BaseModel):
     allergens: list[str] = Field(default_factory=list)
 
     meals_per_day: int = Field(..., ge=1, le=6)
-    plan_days: int = Field(..., ge=1, le=7)
+    plan_days: int = Field(..., ge=1, le=14)
 
     disliked_foods: list[str] = Field(default_factory=list)
     preferred_foods: list[str] = Field(default_factory=list)
@@ -102,7 +83,6 @@ class DietPlanSpecs(BaseModel):
             "heart_disease": self.heart_disease,
             "requires_clinical_diet": self.requires_clinical_diet,
         }
-
         active_exclusions = [
             name for name, is_active in exclusion_flags.items() if is_active
         ]
@@ -132,13 +112,16 @@ GOAL_ADJUSTMENTS: dict[str, int] = {
     "healthy_eating": 0,
 }
 
+PROTEIN_CALORIE_SHARE = 0.30
+CARBOHYDRATE_CALORIE_SHARE = 0.50
+FAT_CALORIE_SHARE = 0.20
+PROTEIN_CALORIES_PER_GRAM = 4
+CARBOHYDRATE_CALORIES_PER_GRAM = 4
+FAT_CALORIES_PER_GRAM = 9
+
 
 def calculate_bmr_mifflin_st_jeor(specs: DietPlanSpecs) -> float:
-    base = (
-        (10 * specs.weight_kg)
-        + (6.25 * specs.height_cm)
-        - (5 * specs.age)
-    )
+    base = 10 * specs.weight_kg + 6.25 * specs.height_cm - 5 * specs.age
 
     if specs.sex == "male":
         return base + 5
@@ -148,17 +131,13 @@ def calculate_bmr_mifflin_st_jeor(specs: DietPlanSpecs) -> float:
 
 def calculate_daily_calorie_targets(specs: DietPlanSpecs) -> dict[str, Any]:
     bmr = calculate_bmr_mifflin_st_jeor(specs)
-
     activity_factor = ACTIVITY_FACTORS[specs.activity_level]
     tdee = bmr * activity_factor
-
     goal_adjustment = GOAL_ADJUSTMENTS[specs.nutrition_goal]
     target_calories = tdee + goal_adjustment
-
     minimum_calories = 1500 if specs.sex == "male" else 1200
     target_calories = max(target_calories, minimum_calories)
-
-    calories_per_meal = target_calories / specs.meals_per_day
+    macros = calculate_macronutrient_targets(target_calories)
 
     return {
         "bmr_kcal": round(bmr),
@@ -166,268 +145,294 @@ def calculate_daily_calorie_targets(specs: DietPlanSpecs) -> dict[str, Any]:
         "tdee_kcal": round(tdee),
         "goal_adjustment_kcal": goal_adjustment,
         "target_daily_calories_kcal": round(target_calories),
-        "estimated_calories_per_meal_kcal": round(calories_per_meal),
-        "method": "Mifflin-St Jeor BMR × activity factor + goal adjustment",
+        "estimated_calories_per_meal_kcal": round(
+            target_calories / specs.meals_per_day
+        ),
+        **macros,
+        "method": "Mifflin-St Jeor BMR x activity factor + goal adjustment",
+        "macronutrient_method": (
+            "protein_g = target_daily_calories_kcal x 30% / 4; "
+            "carbohydrates_g = target_daily_calories_kcal x 50% / 4; "
+            "fat_g = target_daily_calories_kcal x 20% / 9"
+        ),
     }
 
 
-def validate_meal_calories(plan: dict[str, Any], target_daily_calories: int) -> dict[str, Any]:
-    total = 0
-
-    for day in plan.get("plan", []):
-        for meal in day.get("meals", []):
-            calories = meal.get("estimated_calories_kcal", 0)
-            if isinstance(calories, (int, float)):
-                total += calories
-
-    difference = total - target_daily_calories
-
-    plan["backend_meal_calorie_check"] = {
-        "sum_of_meal_calories_kcal": round(total),
-        "target_daily_calories_kcal": target_daily_calories,
-        "difference_kcal": round(difference),
-        "within_100_kcal": abs(difference) <= 100,
+def calculate_macronutrient_targets(target_calories: float) -> dict[str, float]:
+    return {
+        "protein_g": round(
+            target_calories * PROTEIN_CALORIE_SHARE / PROTEIN_CALORIES_PER_GRAM,
+            1,
+        ),
+        "carbohydrates_g": round(
+            target_calories
+            * CARBOHYDRATE_CALORIE_SHARE
+            / CARBOHYDRATE_CALORIES_PER_GRAM,
+            1,
+        ),
+        "fat_g": round(
+            target_calories * FAT_CALORIE_SHARE / FAT_CALORIES_PER_GRAM,
+            1,
+        ),
     }
 
-    return plan
+
+def format_diet_plan_message(plan: dict[str, Any]) -> str:
+    """Build a short readable message from the structured diet-plan JSON."""
+    lines: list[str] = []
+    summary = plan.get("daily_summary") if isinstance(plan, dict) else {}
+    calorie_target = plan.get("calorie_target") if isinstance(plan, dict) else {}
+
+    goal = _clean_text(summary.get("goal") if isinstance(summary, dict) else None)
+    strategy = _clean_text(
+        summary.get("strategy") if isinstance(summary, dict) else None
+    )
+    target_calories = (
+        calorie_target.get("target_daily_calories_kcal")
+        if isinstance(calorie_target, dict)
+        else None
+    )
+
+    header = "Qima nutrition plan"
+    lines.append(f"{header} - {goal}" if goal else header)
+
+    if target_calories is not None:
+        lines.append(f"Daily target: {_format_number(target_calories)} kcal")
+
+    macros = _format_macronutrient_targets(calorie_target)
+    if macros:
+        lines.append(f"Macro targets: {macros}")
+
+    if strategy:
+        lines.append(f"Strategy: {strategy}")
+
+    for day in plan.get("plan") or []:
+        if not isinstance(day, dict):
+            continue
+
+        lines.append("")
+        lines.append(f"Day {day.get('day', '?')}")
+
+        for meal in day.get("meals") or []:
+            if not isinstance(meal, dict):
+                continue
+
+            meal_type = _clean_text(meal.get("meal_type")).title() or "Meal"
+            meal_name = _clean_text(meal.get("meal_name")) or "Generated meal"
+            calories = meal.get("estimated_calories_kcal")
+            calorie_text = (
+                f" ({_format_number(calories)} kcal)"
+                if calories is not None
+                else ""
+            )
+            lines.append(f"{meal_type}: {meal_name}{calorie_text}")
+
+            ingredients = [
+                _format_ingredient(ingredient)
+                for ingredient in meal.get("ingredients") or []
+                if isinstance(ingredient, dict)
+            ]
+            ingredients = [item for item in ingredients if item]
+
+            if ingredients:
+                lines.append(f"Ingredients: {', '.join(ingredients)}")
+
+    return "\n".join(lines).strip()
 
 
-def resolve_carrefour_products_csv(products_csv: str | Path | None = None) -> Path:
-    raw_path = products_csv or os.getenv(CARREFOUR_PRODUCTS_CSV_ENV)
-    if raw_path:
-        path = Path(raw_path)
-        return path if path.is_absolute() else BASE_DIR / path
+def _format_ingredient(ingredient: dict[str, Any]) -> str:
+    item = _clean_text(ingredient.get("item"))
+    amount = ingredient.get("amount")
+    unit = _clean_text(ingredient.get("unit"))
 
-    return DEFAULT_CARREFOUR_PRODUCTS_CSV
+    if not item:
+        return ""
+    if amount is None:
+        return item
 
-
-def _load_carrefour_products(products_csv: str | Path | None = None) -> Any:
-    products_path = resolve_carrefour_products_csv(products_csv)
-
-    if prepare_products is None:
-        raise GroqLLMError(
-            "Price estimation dependencies are unavailable. Install backend requirements."
-        )
-    if not products_path.exists():
-        raise GroqLLMError(f"Carrefour products CSV not found: {products_path}")
-    if products_path not in _CARREFOUR_PRODUCTS_CACHE:
-        _CARREFOUR_PRODUCTS_CACHE[products_path] = prepare_products(products_path)
-    return _CARREFOUR_PRODUCTS_CACHE[products_path]
+    return f"{_format_number(amount)} {unit} {item}".strip()
 
 
-def enrich_plan_with_carrefour_costs(plan: dict[str, Any]) -> dict[str, Any]:
-    """Attach ingredient and meal cost estimates using Carrefour product prices."""
-    if estimate_ingredient_cost is None:
-        raise GroqLLMError(
-            "Price estimation dependencies are unavailable. Install backend requirements."
-        )
-
-    products = _load_carrefour_products()
-    plan_total = 0.0
-    priced_total = 0
-    unpriced_total = 0
-
-    for day in plan.get("plan", []):
-        day_total = 0.0
-        day_priced = 0
-        day_unpriced = 0
-
-        for meal in day.get("meals", []):
-            meal_total = 0.0
-            meal_priced = 0
-            meal_unpriced = 0
-
-            for ingredient in meal.get("ingredients", []):
-                if not isinstance(ingredient, dict):
-                    continue
-
-                detail = estimate_ingredient_cost(ingredient, products)
-                ingredient["carrefour_price_match"] = {
-                    "matched_product": detail["matched_product"],
-                    "matched_brand": detail["matched_brand"],
-                    "matched_category_level_1": detail["matched_category_level_1"],
-                    "product_price_egp": detail["product_price_egp"],
-                    "product_package_quantity": detail["product_package_quantity"],
-                    "product_package_unit_type": detail["product_package_unit_type"],
-                    "estimated_used_cost_egp": detail["estimated_used_cost_egp"],
-                    "match_score": detail["match_score"],
-                    "match_confidence": detail["match_confidence"],
-                    "pricing_method": detail["pricing_method"],
-                }
-
-                cost = detail["estimated_used_cost_egp"]
-                if cost is None:
-                    meal_unpriced += 1
-                else:
-                    meal_priced += 1
-                    meal_total += float(cost)
-
-            meal["cost_estimate"] = {
-                "currency": "EGP",
-                "estimated_total_cost_egp": round(meal_total, 2),
-                "priced_ingredient_count": meal_priced,
-                "unpriced_ingredient_count": meal_unpriced,
-                "source_provider": "carrefour_egypt",
-            }
-            day_total += meal_total
-            day_priced += meal_priced
-            day_unpriced += meal_unpriced
-
-        day["cost_estimate"] = {
-            "currency": "EGP",
-            "estimated_total_cost_egp": round(day_total, 2),
-            "priced_ingredient_count": day_priced,
-            "unpriced_ingredient_count": day_unpriced,
-            "source_provider": "carrefour_egypt",
-        }
-        plan_total += day_total
-        priced_total += day_priced
-        unpriced_total += day_unpriced
-
-    plan["backend_cost_estimate"] = {
-        "currency": "EGP",
-        "estimated_total_plan_cost_egp": round(plan_total, 2),
-        "priced_ingredient_count": priced_total,
-        "unpriced_ingredient_count": unpriced_total,
-        "source_provider": "carrefour_egypt",
-        "products_csv": str(resolve_carrefour_products_csv()),
-        "method": "ingredient_cost = product_price * used_quantity / package_quantity when package size is available",
-    }
-
-    return plan
+def _format_number(value: Any) -> str:
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return f"{value:.1f}".rstrip("0").rstrip(".")
+    return _clean_text(value)
 
 
-class GroqDietPlanGenerator:
-    def __init__(self, model: str = "llama-3.1-8b-instant") -> None:
-        api_key = os.getenv("GROQ_API_KEY")
+def _format_macronutrient_targets(calorie_target: Any) -> str:
+    if not isinstance(calorie_target, dict):
+        return ""
+
+    protein = calorie_target.get("protein_g")
+    carbs = calorie_target.get("carbohydrates_g")
+    fat = calorie_target.get("fat_g")
+
+    if protein is None or carbs is None or fat is None:
+        return ""
+
+    return (
+        f"protein {_format_number(protein)} g, "
+        f"carbs {_format_number(carbs)} g, "
+        f"fat {_format_number(fat)} g"
+    )
+
+
+def _clean_text(value: Any) -> str:
+    return str(value or "").replace("\n", " ").strip()
+
+
+def _parse_json_object(content: str) -> dict[str, Any]:
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise OpenAILLMError(
+            "Model did not return valid JSON. The response may have been cut off "
+            f"before completion: {exc}"
+        ) from exc
+
+    if not isinstance(parsed, dict):
+        raise OpenAILLMError("Model output must be a JSON object.")
+
+    return parsed
+
+
+def _max_completion_tokens(specs: DietPlanSpecs) -> int:
+    meal_count = specs.plan_days * specs.meals_per_day
+    needed_tokens = 1600 + (meal_count * 450)
+    configured_tokens = int(os.getenv("OPENAI_MAX_COMPLETION_TOKENS", "0") or "0")
+    return min(max(configured_tokens, needed_tokens), 16000)
+
+
+class OpenAIDietPlanGenerator:
+    def __init__(self, model: str = "gpt-4o-mini") -> None:
+        api_key = os.getenv("OPENAI_API_KEY")
 
         if not api_key:
             checked_paths = [str(root_env), str(backend_env)]
-            raise GroqLLMError(
-                "Missing GROQ_API_KEY. Add it to .env. "
+            raise OpenAILLMError(
+                "Missing OPENAI_API_KEY. Add it to .env. "
                 f"Checked paths: {checked_paths}"
             )
 
-        self.client = Groq(api_key=api_key)
-        self.model = os.getenv("GROQ_MODEL", model)
+        self.client = OpenAI(api_key=api_key)
+        self.model = os.getenv(
+            "OPENAI_DIET_PLAN_MODEL",
+            os.getenv("OPENAI_MODEL", model),
+        )
 
     def build_prompt(
         self,
         specs: DietPlanSpecs,
         calorie_targets: dict[str, Any],
     ) -> str:
-        user_specs_json = specs.model_dump_json(indent=2)
-        calorie_targets_json = json.dumps(
-            calorie_targets,
-            indent=2,
-            ensure_ascii=False,
+        payload = {
+            "user_specifications": {
+                "age": specs.age,
+                "sex": specs.sex,
+                "height_cm": specs.height_cm,
+                "weight_kg": specs.weight_kg,
+                "activity_level": specs.activity_level,
+                "nutrition_goal": specs.nutrition_goal,
+                "meals_per_day": specs.meals_per_day,
+                "plan_days": specs.plan_days,
+                "dietary_restrictions": specs.dietary_restrictions,
+                "allergens": specs.allergens,
+                "disliked_foods": specs.disliked_foods,
+                "preferred_foods": specs.preferred_foods,
+                "budget": specs.budget,
+            },
+            "calorie_and_macro_targets": {
+                "target_daily_calories_kcal": calorie_targets[
+                    "target_daily_calories_kcal"
+                ],
+                "estimated_calories_per_meal_kcal": calorie_targets[
+                    "estimated_calories_per_meal_kcal"
+                ],
+                "protein_g": calorie_targets["protein_g"],
+                "carbohydrates_g": calorie_targets["carbohydrates_g"],
+                "fat_g": calorie_targets["fat_g"],
+                "method": calorie_targets["method"],
+                "macronutrient_method": calorie_targets["macronutrient_method"],
+                "macro_split": "30% protein, 50% carbohydrates, 20% fat",
+            },
+            "json_shape": {
+                "support_status": "supported",
+                "safety_flags": [],
+                "assumptions": [],
+                "calorie_target": {
+                    "target_daily_calories_kcal": 0,
+                    "estimated_calories_per_meal_kcal": 0,
+                    "protein_g": 0,
+                    "carbohydrates_g": 0,
+                    "fat_g": 0,
+                    "method": "string",
+                    "macronutrient_method": "string",
+                },
+                "daily_summary": {
+                    "goal": "string",
+                    "strategy": "string",
+                    "estimated_budget_level": "low|mid|expensive",
+                    "estimated_total_daily_calories_kcal": 0,
+                },
+                "plan": [
+                    {
+                        "day": 1,
+                        "meals": [
+                            {
+                                "meal_type": "breakfast|lunch|dinner|snack",
+                                "meal_name": "string",
+                                "estimated_calories_kcal": 0,
+                                "ingredients": [
+                                    {
+                                        "item": "string",
+                                        "amount": 0,
+                                        "unit": "g|ml|piece|tsp|tbsp",
+                                    }
+                                ],
+                                "preparation_steps": ["string"],
+                                "why_it_fits": "string",
+                            }
+                        ],
+                    }
+                ],
+                "shopping_list": [
+                    {
+                        "item": "string",
+                        "total_amount": 0,
+                        "unit": "g|ml|piece|tsp|tbsp",
+                        "category": "protein|carbohydrate|vegetable|fruit|dairy|fat|spice|other",
+                    }
+                ],
+                "notes": [],
+            },
+        }
+
+        return (
+            "Generate a practical non-clinical diet plan for a generally healthy adult. "
+            "Return valid JSON only. "
+            f"Create exactly {specs.plan_days} day(s), each with exactly "
+            f"{specs.meals_per_day} meal(s). "
+            "Respect allergens, dietary restrictions, disliked foods, preferred foods, "
+            "budget, calories, and macros. Use realistic normal foods and quantities. "
+            "Keep meal names, preparation steps, reasons, and notes concise. "
+            "Do not provide diagnosis, disease treatment, supplement prescription, "
+            "or clinical medical advice. Use the provided calorie and macro targets exactly. "
+            "Macro split is 30% protein, 50% carbohydrates, 20% fat. "
+            f"DATA={json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}"
         )
 
-        return f"""
-You are Qima's diet-plan generation assistant.
+    def generate_plan(
+        self,
+        specs: DietPlanSpecs,
+        *,
+        include_costs: bool = False,
+    ) -> dict[str, Any]:
+        del include_costs  # Kept only for existing backend call compatibility.
 
-Your task:
-Generate a practical diet plan using the user specs and the calculated calorie target.
-
-Critical rules:
-1. Return valid JSON only.
-2. Do not include markdown.
-3. Do not diagnose disease.
-4. Do not claim to treat medical conditions.
-5. Do not prescribe supplements.
-6. Respect allergens strictly.
-7. Respect dietary restrictions strictly.
-8. Avoid disliked foods.
-9. Prefer preferred foods when reasonable.
-10. Make the plan realistic for the budget level.
-11. Use simple meals suitable for normal home cooking.
-12. Use the calculated calorie target as the main planning constraint.
-13. The sum of estimated_calories_kcal across all meals must be within ±100 kcal of target_daily_calories_kcal.
-14. Do not set estimated_total_daily_calories_kcal equal to the target unless the meal calories actually sum to that value.
-15. For weight loss, use moderate portions and high-protein, high-fiber meals.
-16. The answer must be food guidance only, not medical advice.
-17. For every meal ingredient, specify the required amount.
-18. Use grams as the standard unit for solid foods. For liquids, use milliliters only if grams would be more confusing.
-19. Ingredient quantities must be realistic for one person unless plan_days or meals imply otherwise.
-20. This plan is only for generally healthy adults.
-
-Budget meaning:
-- "low": cheap, common ingredients, minimal expensive proteins
-- "mid": balanced cost, normal ingredients
-- "expensive": allows premium ingredients
-
-User specs:
-{user_specs_json}
-
-Calculated calorie targets:
-{calorie_targets_json}
-
-Required JSON output shape:
-{{
-  "support_status": "supported",
-  "safety_flags": [],
-  "assumptions": [
-    "string"
-  ],
-  "calorie_target": {{
-    "target_daily_calories_kcal": number,
-    "estimated_calories_per_meal_kcal": number,
-    "method": "string"
-  }},
-  "daily_summary": {{
-    "goal": "string",
-    "strategy": "string",
-    "estimated_budget_level": "low | mid | expensive",
-    "estimated_total_daily_calories_kcal": number
-  }},
-  "meal_calorie_check": {{
-    "sum_of_meal_calories_kcal": number,
-    "target_daily_calories_kcal": number,
-    "difference_kcal": number,
-    "within_target_range": true
-  }},
-  "plan": [
-    {{
-      "day": 1,
-      "meals": [
-        {{
-          "meal_type": "breakfast | lunch | dinner | snack",
-          "meal_name": "string",
-          "estimated_calories_kcal": number,
-          "ingredients": [
-            {{
-              "item": "string",
-              "amount": number,
-              "unit": "g | ml | piece | tsp | tbsp",
-              "notes": "string"
-            }}
-          ],
-          "preparation_steps": [
-            "string"
-          ],
-          "why_it_fits": "string",
-          "allergen_check": "string",
-          "budget_fit": "string"
-        }}
-      ]
-    }}
-  ],
-  "shopping_list": [
-    {{
-      "item": "string",
-      "total_amount": number,
-      "unit": "g | ml | piece | tsp | tbsp",
-      "category": "protein | carbohydrate | vegetable | fruit | dairy | fat | spice | other",
-      "priority": "must_have | optional"
-    }}
-  ],
-  "notes": [
-    "string"
-  ]
-}}
-""".strip()
-
-    def generate_plan(self, specs: DietPlanSpecs) -> dict[str, Any]:
         calorie_targets = calculate_daily_calorie_targets(specs)
         prompt = self.build_prompt(specs, calorie_targets)
 
@@ -438,86 +443,31 @@ Required JSON output shape:
                     {
                         "role": "system",
                         "content": (
-                            "You are a strict JSON diet-plan generator for a nutrition app. "
-                            "Return JSON only. Follow safety, calorie, allergy, and dietary constraints exactly."
+                            "You generate compact JSON diet plans for generally "
+                            "healthy adults. Return JSON only."
                         ),
                     },
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    },
+                    {"role": "user", "content": prompt},
                 ],
-                temperature=0.7,
-                max_tokens=3000,
+                temperature=0.3,
+                max_completion_tokens=_max_completion_tokens(specs),
                 response_format={"type": "json_object"},
             )
-
             content = response.choices[0].message.content
 
             if not content:
-                raise GroqLLMError("Groq returned an empty response.")
+                raise OpenAILLMError("OpenAI returned an empty response.")
 
-            plan = json.loads(content)
-
-            plan = validate_meal_calories(
-                plan,
-                calorie_targets["target_daily_calories_kcal"],
-            )
-
+            plan = _parse_json_object(content)
             plan["backend_calorie_targets"] = calorie_targets
-            plan = enrich_plan_with_carrefour_costs(plan)
-
+            plan["formatted_message"] = format_diet_plan_message(plan)
             return plan
 
-        except json.JSONDecodeError as exc:
-            raise GroqLLMError(f"Model did not return valid JSON: {exc}") from exc
-
+        except OpenAILLMError:
+            raise
         except Exception as exc:
-            raise GroqLLMError(f"Groq API call failed: {exc}") from exc
+            raise OpenAILLMError(f"OpenAI API call failed: {exc}") from exc
 
 
-if __name__ == "__main__":
-    raw_specs = {
-        "age": 22,
-        "sex": "male",
-        "height_cm": 175,
-        "weight_kg": 78,
-        "activity_level": "moderate",
-        "nutrition_goal": "weight_loss",
-        "dietary_restrictions": ["halal"],
-        "allergens": ["peanuts"],
-        "meals_per_day": 3,
-        "plan_days": 1,
-        "disliked_foods": ["tuna", "eggplant"],
-        "preferred_foods": ["chicken", "rice", "yogurt"],
-        "budget": "low",
-        "pregnant_or_breastfeeding": False,
-        "eating_disorder_history": False,
-        "underweight": False,
-        "diabetes": False,
-        "kidney_disease": False,
-        "heart_disease": False,
-        "requires_clinical_diet": False,
-    }
-
-    try:
-        specs = DietPlanSpecs(**raw_specs)
-
-        calorie_targets = calculate_daily_calorie_targets(specs)
-        print("Backend-calculated calorie targets:")
-        print(json.dumps(calorie_targets, indent=2, ensure_ascii=False))
-        print()
-
-        generator = GroqDietPlanGenerator()
-        plan = generator.generate_plan(specs)
-
-        print("Generated diet plan:")
-        print(json.dumps(plan, indent=2, ensure_ascii=False))
-
-    except ValidationError as exc:
-        print("Invalid user specs:")
-        print(exc)
-
-    except GroqLLMError as exc:
-        print("LLM error:")
-        print(exc)
+# Backward-compatible alias in case other files still import GroqDietPlanGenerator.
+GroqDietPlanGenerator = OpenAIDietPlanGenerator

@@ -113,6 +113,34 @@ def test_estimate_ingredient_cost_supports_groq_meal_ingredient_shape(tmp_path: 
     assert detail["pricing_method"] == "proportional_by_package_size"
 
 
+def test_estimator_prices_canned_tuna_when_product_name_omits_canned(tmp_path: Path) -> None:
+    products_csv = tmp_path / "products.csv"
+    products_csv.write_text(
+        "\n".join(
+            [
+                "name,price,category_level_1,category_level_2,category_level_3,category_level_4,brand",
+                "John West Solid Tuna In Sunflower Oil - 170gm,119.99,Food Cupboard,Tins Jars Packets,Tuna Seafood,Tuna,John West",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    products = prepare_products(products_csv)
+    detail = estimate_ingredient_cost(
+        {
+            "item": "canned tuna",
+            "amount": 150,
+            "unit": "g",
+        },
+        products,
+    )
+
+    assert detail["matched_product"] == "John West Solid Tuna In Sunflower Oil - 170gm"
+    assert detail["product_package_quantity"] == 170
+    assert detail["estimated_used_cost_egp"] == 105.87
+    assert detail["pricing_method"] == "proportional_by_package_size"
+
+
 def test_estimator_prioritizes_food_kind_over_descriptor_overlap(tmp_path: Path) -> None:
     products_csv = tmp_path / "products.csv"
     products_csv.write_text(
