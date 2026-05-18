@@ -107,6 +107,13 @@
         },
         "plan_preferences": {
           "$ref": "#/$defs/PlanPreferences"
+        },
+        "below_range_lab_markers": {
+          "type": "array",
+          "description": "Latest saved profile lab markers that are below range and should be used only for food-focused nutrient guidance.",
+          "items": {
+            "$ref": "#/$defs/PlanLabMarker"
+          }
         }
       },
       "oneOf": [
@@ -276,6 +283,55 @@
           "type": ["string", "null"],
           "enum": ["single_day", "single_meal", "multi_day", null],
           "description": "Optional plan horizon. If null or omitted, backend may default to single_day."
+        }
+      }
+    },
+    "PlanLabMarker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "report_id",
+        "test_name",
+        "canonical_test_key",
+        "result_value",
+        "unit",
+        "reference_interval_raw",
+        "matched_band",
+        "confirmed_at",
+        "status"
+      ],
+      "properties": {
+        "report_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "test_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "canonical_test_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "result_value": {
+          "type": ["number", "string", "null"]
+        },
+        "unit": {
+          "type": ["string", "null"]
+        },
+        "reference_interval_raw": {
+          "type": ["string", "null"]
+        },
+        "matched_band": {
+          "type": ["string", "null"]
+        },
+        "confirmed_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "const": "below_range"
         }
       }
     },

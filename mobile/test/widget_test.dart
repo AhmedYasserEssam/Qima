@@ -452,6 +452,106 @@ void main() {
     expect(find.text('within range'), findsOneWidget);
   });
 
+  test('plan lab marker helpers include only below-range supported payloads', () {
+    final markers = planBelowRangeLabMarkersFromPayload([
+      {
+        'report_id': 42,
+        'test_name': '25(OH) Vitamin D, Serum',
+        'canonical_test_key': 'vitamin_d_25oh_serum',
+        'section': 'chemistry',
+        'result_value': 26.9,
+        'unit': 'ng/mL',
+        'reference_interval': {'raw': 'Insufficiency 21-29'},
+        'status': 'below_range',
+        'matched_band': 'Insufficiency',
+        'confirmed_at': '2026-05-18T10:15:30Z',
+      },
+      {
+        'report_id': 43,
+        'test_name': 'Calcium (Total), Serum',
+        'canonical_test_key': 'calcium_total_serum',
+        'section': 'chemistry',
+        'result_value': 9.6,
+        'unit': 'mg/dL',
+        'reference_interval': {'raw': '8.8 - 10.6'},
+        'status': 'within_range',
+        'confirmed_at': '2026-05-18T10:15:30Z',
+      },
+      {
+        'report_id': 44,
+        'test_name': 'Unsupported Marker',
+        'canonical_test_key': 'unsupported_marker',
+        'section': 'unknown',
+        'result_value': 1.2,
+        'unit': 'unit',
+        'reference_interval': {'raw': '<2'},
+        'status': 'below_range',
+        'confirmed_at': '2026-05-18T10:15:30Z',
+      },
+    ]);
+
+    expect(markers.map((marker) => marker.testName), [
+      '25(OH) Vitamin D, Serum',
+      'Unsupported Marker',
+    ]);
+    expect(
+      unsupportedPlanLabMarkers(markers).single.testName,
+      'Unsupported Marker',
+    );
+
+    final body = planLabMarkerRequestBody(markers.first);
+    expect(body['status'], 'below_range');
+    expect(body['canonical_test_key'], 'vitamin_d_25oh_serum');
+    expect(body['reference_interval_raw'], 'Insufficiency 21-29');
+    expect(body['matched_band'], 'Insufficiency');
+    expect(body['confirmed_at'], '2026-05-18T10:15:30Z');
+  });
+
+  testWidgets('plan lab marker notice renders food focus and blocked marker', (
+    WidgetTester tester,
+  ) async {
+    final markers = planBelowRangeLabMarkersFromPayload([
+      {
+        'report_id': 42,
+        'test_name': '25(OH) Vitamin D, Serum',
+        'canonical_test_key': 'vitamin_d_25oh_serum',
+        'section': 'chemistry',
+        'result_value': 26.9,
+        'unit': 'ng/mL',
+        'reference_interval': {'raw': 'Insufficiency 21-29'},
+        'status': 'below_range',
+        'matched_band': 'Insufficiency',
+        'confirmed_at': '2026-05-18T10:15:30Z',
+      },
+      {
+        'report_id': 44,
+        'test_name': 'Unsupported Marker',
+        'canonical_test_key': 'unsupported_marker',
+        'section': 'unknown',
+        'result_value': 1.2,
+        'unit': 'unit',
+        'reference_interval': {'raw': '<2'},
+        'status': 'below_range',
+        'confirmed_at': '2026-05-18T10:15:30Z',
+      },
+    ]);
+
+    await tester.pumpWidget(
+      _wrap(
+        PlanLabMarkerNotice(
+          markers: markers,
+          unsupportedMarkers: unsupportedPlanLabMarkers(markers),
+        ),
+      ),
+    );
+
+    expect(find.text('Lab-informed foods'), findsOneWidget);
+    expect(find.text('25(OH) Vitamin D, Serum'), findsOneWidget);
+    expect(find.textContaining('Food focus: vitamin D'), findsOneWidget);
+    expect(find.text('Unsupported Marker'), findsOneWidget);
+    expect(find.textContaining('Plan generation is blocked'), findsOneWidget);
+  });
+
   test(
     'recipe discuss body includes context transcript and valid fields only',
     () {

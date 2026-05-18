@@ -3090,6 +3090,51 @@ class ProfileLabResultsCard extends StatelessWidget {
   }
 }
 
+class PlanLabMarkerNotice extends StatelessWidget {
+  const PlanLabMarkerNotice({
+    super.key,
+    required this.markers,
+    required this.unsupportedMarkers,
+  });
+
+  final List<ProfileLabResultRecord> markers;
+  final List<ProfileLabResultRecord> unsupportedMarkers;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return InputCard(
+      title: 'Lab-informed foods',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final marker in markers)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                isSupportedPlanLabMarker(marker)
+                    ? Icons.check_circle_outline
+                    : Icons.error_outline,
+                color: isSupportedPlanLabMarker(marker)
+                    ? colors.primary
+                    : colors.error,
+              ),
+              title: Text(marker.testName),
+              subtitle: Text(planLabMarkerFocusDescription(marker)),
+            ),
+          if (unsupportedMarkers.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Plan generation is blocked until unsupported below-range lab markers are handled.',
+              style: TextStyle(color: colors.error),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class PlanScreen extends ConsumerStatefulWidget {
   const PlanScreen({super.key});
 
@@ -3136,6 +3181,12 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   @override
   Widget build(BuildContext context) {
     final canEditPlanInputs = !loadingProfile;
+    final belowRangeLabMarkers = planBelowRangeLabMarkersFromPayload(
+      currentProfile == null ? null : currentProfile!['lab_results'],
+    );
+    final unsupportedLabMarkers = unsupportedPlanLabMarkers(
+      belowRangeLabMarkers,
+    );
     return EndpointPage(
       title: 'Nutrition Plan',
       children: [
@@ -3203,6 +3254,11 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
             ],
           ),
         ),
+        if (belowRangeLabMarkers.isNotEmpty)
+          PlanLabMarkerNotice(
+            markers: belowRangeLabMarkers,
+            unsupportedMarkers: unsupportedLabMarkers,
+          ),
         PlanDisclaimerCard(
           accepted: planDisclaimerAccepted,
           onChanged: (value) => setState(() => planDisclaimerAccepted = value),
@@ -3249,6 +3305,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
               'weight_kg',
               'activity_level',
               'goal',
+              'lab_results',
             ],
           );
       if (!mounted) {
@@ -3289,6 +3346,23 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       showValidation(context, 'Plan days must be between 1 and 14.');
       return;
     }
+    final belowRangeLabMarkers = planBelowRangeLabMarkersFromPayload(
+      currentProfile == null ? null : currentProfile!['lab_results'],
+    );
+    final unsupportedLabMarkers = unsupportedPlanLabMarkers(
+      belowRangeLabMarkers,
+    );
+    if (unsupportedLabMarkers.isNotEmpty) {
+      final labels = unsupportedLabMarkers
+          .map((marker) => marker.testName)
+          .take(3)
+          .join(', ');
+      showValidation(
+        context,
+        'Dietary plan cannot use unsupported below-range lab marker(s): $labels.',
+      );
+      return;
+    }
     final dislikedFoods = dislikedFoodsController.text
         .split(',')
         .map((item) => item.trim())
@@ -3307,6 +3381,9 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
         if (budgetLevel == 'low') 'budget_friendly',
         'egyptian_foods',
       ],
+      'below_range_lab_markers': belowRangeLabMarkers
+          .map(planLabMarkerRequestBody)
+          .toList(),
       'plan_preferences': {
         'meal_count': mealsPerDay,
         'meals_per_day': mealsPerDay,
@@ -5030,6 +5107,33 @@ class ProfileLabResultRecord {
   }
 }
 
+const supportedPlanLabMarkerNutrients = <String, String>{
+  'vitamin_d_25oh_serum': 'vitamin D',
+  'vitamin_b12_serum': 'vitamin B12',
+  'folic_acid_serum': 'folate',
+  'ferritin_serum': 'iron',
+  'iron_serum': 'iron',
+  'iron_total_serum': 'iron',
+  'serum_iron': 'iron',
+  'magnesium_serum': 'magnesium',
+  'zinc_serum': 'zinc',
+  'calcium_total_serum': 'calcium',
+  'phosphorus_serum': 'phosphorus',
+};
+
+bool isSupportedPlanLabMarker(ProfileLabResultRecord marker) {
+  return supportedPlanLabMarkerNutrients.containsKey(marker.canonicalTestKey);
+}
+
+String planLabMarkerFocusDescription(ProfileLabResultRecord marker) {
+  final nutrient = supportedPlanLabMarkerNutrients[marker.canonicalTestKey];
+  final result = marker.resultLabel;
+  if (nutrient == null) {
+    return '$result. Unsupported for dietary plan food focus.';
+  }
+  return '$result. Food focus: $nutrient.';
+}
+
 class RecipeSuggestionRecord {
   const RecipeSuggestionRecord({
     required this.recipeId,
@@ -5178,6 +5282,36 @@ List<ProfileLabResultRecord> profileLabResultsFromPayload(Object? rawResults) {
     );
   }
   return results;
+}
+
+List<ProfileLabResultRecord> planBelowRangeLabMarkersFromPayload(
+  Object? rawResults,
+) {
+  return profileLabResultsFromPayload(rawResults)
+      .where((result) => result.status == 'below_range')
+      .toList();
+}
+
+List<ProfileLabResultRecord> unsupportedPlanLabMarkers(
+  List<ProfileLabResultRecord> markers,
+) {
+  return markers.where((marker) => !isSupportedPlanLabMarker(marker)).toList();
+}
+
+Map<String, Object?> planLabMarkerRequestBody(
+  ProfileLabResultRecord marker,
+) {
+  return {
+    'report_id': marker.reportId,
+    'test_name': marker.testName,
+    'canonical_test_key': marker.canonicalTestKey,
+    'result_value': marker.resultValue,
+    'unit': marker.unit,
+    'reference_interval_raw': marker.referenceRaw,
+    'matched_band': marker.matchedBand,
+    'confirmed_at': marker.confirmedAt,
+    'status': marker.status,
+  };
 }
 
 List<InventoryItemRecord> inventoryItemsFromPayload(Map<String, Object?> raw) {

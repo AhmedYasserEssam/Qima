@@ -29,7 +29,9 @@ SUPPORTED_UNITS = (
     "%",
 )
 
-_UNIT_PATTERN = "|".join(re.escape(unit) for unit in sorted(SUPPORTED_UNITS, key=len, reverse=True))
+_UNIT_PATTERN = "|".join(
+    re.escape(unit) for unit in sorted(SUPPORTED_UNITS, key=len, reverse=True)
+)
 _ROW_RE = re.compile(
     rf"^(?P<name>.+?)\s+(?P<unit>{_UNIT_PATTERN})\s+"
     r"(?P<result>[<>]=?\s*-?\d+(?:\.\d+)?|-?\d+(?:\.\d+)?|[A-Za-z][^\s]*)"
@@ -89,6 +91,12 @@ _DISPLAY_TEST_ALIASES = {
     "Vitamin B12, Serum": "vitamin_b12_serum",
     "Ferritin, Serum": "ferritin_serum",
 }
+_VITAMIN_D_CATEGORICAL_STATUS_BY_BAND = {
+    "deficiency": LabReportStatus.BELOW_RANGE,
+    "insufficiency": LabReportStatus.BELOW_RANGE,
+    "sufficiency": LabReportStatus.WITHIN_RANGE,
+    "hypervitaminosis": LabReportStatus.ABOVE_RANGE,
+}
 
 
 def _compact_text(value: str) -> str:
@@ -96,7 +104,10 @@ def _compact_text(value: str) -> str:
 
 
 _COMPACT_DISPLAY_ALIASES = sorted(
-    ((_compact_text(test_name), test_name, canonical_key) for test_name, canonical_key in _DISPLAY_TEST_ALIASES.items()),
+    (
+        (_compact_text(test_name), test_name, canonical_key)
+        for test_name, canonical_key in _DISPLAY_TEST_ALIASES.items()
+    ),
     key=lambda item: len(item[0]),
     reverse=True,
 )
@@ -138,7 +149,9 @@ def parse_lab_report_text(text: str) -> LabReportParseResult:
             if test is not None:
                 band_lines, next_index = _collect_following_band_lines(lines, index + 1)
                 if band_lines and _looks_like_band(test.reference_interval.raw):
-                    test = _with_categorical_bands(test, [test.reference_interval.raw or "", *band_lines])
+                    test = _with_categorical_bands(
+                        test, [test.reference_interval.raw or "", *band_lines]
+                    )
                     consumed.update(range(index + 1, next_index))
                     index = next_index
                 else:
@@ -157,17 +170,27 @@ def parse_lab_report_text(text: str) -> LabReportParseResult:
         index += 1
 
     for index, line in enumerate(lines):
-        if index in consumed or _is_header(line) or _section_from_line(line) is not None:
+        if (
+            index in consumed
+            or _is_header(line)
+            or _section_from_line(line) is not None
+        ):
             continue
         canonical_key = canonical_test_key(line)
         if canonical_key is None:
             continue
-        broken = _test_from_line_broken(lines, index, current_section_for_line(lines, index))
-        if broken is not None and all(test.canonical_test_key != broken.canonical_test_key for test in tests):
+        broken = _test_from_line_broken(
+            lines, index, current_section_for_line(lines, index)
+        )
+        if broken is not None and all(
+            test.canonical_test_key != broken.canonical_test_key for test in tests
+        ):
             tests.append(broken)
 
     warnings = build_lab_report_warnings(text, tests)
-    return LabReportParseResult(tests=tests, sections_found=sections_found, warnings=warnings)
+    return LabReportParseResult(
+        tests=tests, sections_found=sections_found, warnings=warnings
+    )
 
 
 def build_lab_report_warnings(text: str, tests: list[LabReportTest]) -> list[str]:
@@ -178,9 +201,13 @@ def build_lab_report_warnings(text: str, tests: list[LabReportTest]) -> list[str
         if not test.unit:
             warnings.append(f"Parsed test '{test.test_name}' is missing a unit.")
         if not test.reference_interval.raw:
-            warnings.append(f"Parsed test '{test.test_name}' is missing a reference interval.")
+            warnings.append(
+                f"Parsed test '{test.test_name}' is missing a reference interval."
+            )
     if _looks_table_like(text) and not tests:
-        warnings.append("Extracted text appears table-like, but no lab rows were parsed.")
+        warnings.append(
+            "Extracted text appears table-like, but no lab rows were parsed."
+        )
     return warnings
 
 
@@ -292,18 +319,30 @@ def classify_result(
     if reference_interval.type == LabReportReferenceType.LOWER_BOUND:
         if reference_interval.low is None:
             return LabReportStatus.INDETERMINATE
-        if reference_interval.operator == ">" and result_value <= reference_interval.low:
+        if (
+            reference_interval.operator == ">"
+            and result_value <= reference_interval.low
+        ):
             return LabReportStatus.BELOW_RANGE
-        if reference_interval.operator == ">=" and result_value < reference_interval.low:
+        if (
+            reference_interval.operator == ">="
+            and result_value < reference_interval.low
+        ):
             return LabReportStatus.BELOW_RANGE
         return LabReportStatus.WITHIN_RANGE
 
     if reference_interval.type == LabReportReferenceType.UPPER_BOUND:
         if reference_interval.high is None:
             return LabReportStatus.INDETERMINATE
-        if reference_interval.operator == "<" and result_value >= reference_interval.high:
+        if (
+            reference_interval.operator == "<"
+            and result_value >= reference_interval.high
+        ):
             return LabReportStatus.ABOVE_RANGE
-        if reference_interval.operator == "<=" and result_value > reference_interval.high:
+        if (
+            reference_interval.operator == "<="
+            and result_value > reference_interval.high
+        ):
             return LabReportStatus.ABOVE_RANGE
         return LabReportStatus.WITHIN_RANGE
 
@@ -322,6 +361,31 @@ def match_categorical_band(
     return None
 
 
+def classify_categorical_band_status(
+    *,
+    canonical_test_key: str,
+    matched_band: str | None,
+) -> LabReportStatus | None:
+    if canonical_test_key != "vitamin_d_25oh_serum" or matched_band is None:
+        return None
+    normalized_band = " ".join(matched_band.casefold().split())
+    return _VITAMIN_D_CATEGORICAL_STATUS_BY_BAND.get(normalized_band)
+
+
+def classify_categorical_result(
+    *,
+    canonical_test_key: str,
+    result_value: float | str | None,
+    bands: list[LabReportBand],
+) -> tuple[LabReportStatus, str | None]:
+    matched_band = match_categorical_band(result_value, bands)
+    status = classify_categorical_band_status(
+        canonical_test_key=canonical_test_key,
+        matched_band=matched_band,
+    )
+    return status or LabReportStatus.INDETERMINATE, matched_band
+
+
 def _test_from_row(
     row_match: re.Match[str],
     raw_text: str,
@@ -333,6 +397,14 @@ def _test_from_row(
         return None
     result_value = _parse_result_value(row_match.group("result"))
     reference_interval = parse_reference_interval(row_match.group("reference"))
+    matched_band = None
+    status = classify_result(result_value, reference_interval)
+    if reference_interval.type == LabReportReferenceType.CATEGORICAL_BANDS:
+        status, matched_band = classify_categorical_result(
+            canonical_test_key=canonical_key,
+            result_value=result_value,
+            bands=reference_interval.bands,
+        )
     return LabReportTest(
         section=section,
         test_name=test_name,
@@ -340,13 +412,16 @@ def _test_from_row(
         result_value=result_value,
         unit=normalize_unit(row_match.group("unit")),
         reference_interval=reference_interval,
-        status=classify_result(result_value, reference_interval),
+        status=status,
+        matched_band=matched_band,
         raw_text=raw_text,
         confidence=0.9,
     )
 
 
-def _test_from_compact_row(line: str, section: LabReportSection) -> LabReportTest | None:
+def _test_from_compact_row(
+    line: str, section: LabReportSection
+) -> LabReportTest | None:
     compact_line = _compact_text(line)
     if not compact_line:
         return None
@@ -362,8 +437,11 @@ def _test_from_compact_row(line: str, section: LabReportSection) -> LabReportTes
         matched_band = None
         status = classify_result(result_value, reference_interval)
         if reference_interval.type == LabReportReferenceType.CATEGORICAL_BANDS:
-            status = LabReportStatus.INDETERMINATE
-            matched_band = match_categorical_band(result_value, reference_interval.bands)
+            status, matched_band = classify_categorical_result(
+                canonical_test_key=canonical_key,
+                result_value=result_value,
+                bands=reference_interval.bands,
+            )
         return LabReportTest(
             section=section,
             test_name=test_name,
@@ -410,7 +488,9 @@ def _parse_compact_measurement(
     return result_value, unit, reference_interval
 
 
-def _parse_compact_categorical_reference(raw: str | None) -> LabReportReferenceInterval | None:
+def _parse_compact_categorical_reference(
+    raw: str | None,
+) -> LabReportReferenceInterval | None:
     if not raw:
         return None
     band_matches = list(
@@ -424,7 +504,12 @@ def _parse_compact_categorical_reference(raw: str | None) -> LabReportReferenceI
     bands = [
         band
         for match in band_matches
-        if (band := parse_reference_band(f"{match.group('label')} {match.group('expression')}")) is not None
+        if (
+            band := parse_reference_band(
+                f"{match.group('label')} {match.group('expression')}"
+            )
+        )
+        is not None
     ]
     if not bands:
         return None
@@ -465,7 +550,11 @@ def _test_from_line_broken(
         if unit is None and _is_supported_unit(value):
             unit = normalize_unit(value)
             continue
-        if reference_raw is None and (parse_reference_band(value) is not None or _RANGE_RE.match(value) or _BOUND_RE.match(value)):
+        if reference_raw is None and (
+            parse_reference_band(value) is not None
+            or _RANGE_RE.match(value)
+            or _BOUND_RE.match(value)
+        ):
             reference_raw = value
 
     reference_interval = parse_reference_interval(reference_raw)
@@ -482,8 +571,14 @@ def _test_from_line_broken(
     )
 
 
-def _with_categorical_bands(test: LabReportTest, raw_band_lines: list[str]) -> LabReportTest:
-    bands = [band for raw in raw_band_lines if (band := parse_reference_band(raw)) is not None]
+def _with_categorical_bands(
+    test: LabReportTest, raw_band_lines: list[str]
+) -> LabReportTest:
+    bands = [
+        band
+        for raw in raw_band_lines
+        if (band := parse_reference_band(raw)) is not None
+    ]
     if not bands:
         return test
     raw = "\n".join(band.raw for band in bands)
@@ -492,22 +587,33 @@ def _with_categorical_bands(test: LabReportTest, raw_band_lines: list[str]) -> L
         type=LabReportReferenceType.CATEGORICAL_BANDS,
         bands=bands,
     )
+    status, matched_band = classify_categorical_result(
+        canonical_test_key=test.canonical_test_key,
+        result_value=test.result_value,
+        bands=bands,
+    )
     return test.model_copy(
         update={
             "reference_interval": reference_interval,
-            "status": LabReportStatus.INDETERMINATE,
-            "matched_band": match_categorical_band(test.result_value, bands),
+            "status": status,
+            "matched_band": matched_band,
             "raw_text": "\n".join([test.raw_text, *raw_band_lines]),
         }
     )
 
 
-def _collect_following_band_lines(lines: list[str], index: int) -> tuple[list[str], int]:
+def _collect_following_band_lines(
+    lines: list[str], index: int
+) -> tuple[list[str], int]:
     band_lines: list[str] = []
     cursor = index
     while cursor < len(lines):
         line = lines[cursor]
-        if _section_from_line(line) is not None or _ROW_RE.match(line) or _is_header(line):
+        if (
+            _section_from_line(line) is not None
+            or _ROW_RE.match(line)
+            or _is_header(line)
+        ):
             break
         if parse_reference_band(line) is None:
             break

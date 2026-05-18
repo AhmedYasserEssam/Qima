@@ -186,6 +186,38 @@ def _create_lab_report_schema(conn) -> None:
     )
 
 
+def _backfill_vitamin_d_categorical_status(conn) -> None:
+    conn.execute(
+        text(
+            """
+            UPDATE lab_report_tests
+            SET status = CASE lower(matched_band)
+                WHEN 'deficiency' THEN 'below_range'
+                WHEN 'insufficiency' THEN 'below_range'
+                WHEN 'sufficiency' THEN 'within_range'
+                WHEN 'hypervitaminosis' THEN 'above_range'
+                ELSE status
+            END
+            WHERE canonical_test_key = 'vitamin_d_25oh_serum'
+              AND reference_interval_type = 'categorical_bands'
+              AND lower(COALESCE(matched_band, '')) IN (
+                  'deficiency',
+                  'insufficiency',
+                  'sufficiency',
+                  'hypervitaminosis'
+              )
+              AND status <> CASE lower(matched_band)
+                WHEN 'deficiency' THEN 'below_range'
+                WHEN 'insufficiency' THEN 'below_range'
+                WHEN 'sufficiency' THEN 'within_range'
+                WHEN 'hypervitaminosis' THEN 'above_range'
+                ELSE status
+              END;
+            """
+        )
+    )
+
+
 def init_db() -> None:
     pgvector_enabled = _try_init_pgvector_extension()
     with engine.begin() as conn:
@@ -502,6 +534,7 @@ def init_db() -> None:
             )
         )
         _create_lab_report_schema(conn)
+        _backfill_vitamin_d_categorical_status(conn)
         conn.execute(
             text(
                 """

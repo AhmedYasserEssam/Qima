@@ -60,6 +60,7 @@ class DietPlanSpecs(BaseModel):
 
     disliked_foods: list[str] = Field(default_factory=list)
     preferred_foods: list[str] = Field(default_factory=list)
+    lab_food_focuses: list[dict[str, Any]] = Field(default_factory=list)
 
     budget: Literal["low", "mid", "expensive"]
 
@@ -206,7 +207,8 @@ def format_diet_plan_message(plan: dict[str, Any]) -> str:
     if strategy:
         lines.append(f"Strategy: {strategy}")
 
-    for day in plan.get("plan") or []:
+    plan_days = plan.get("plan") or plan.get("days") or []
+    for day in plan_days:
         if not isinstance(day, dict):
             continue
 
@@ -343,6 +345,7 @@ class OpenAIDietPlanGenerator:
                 "allergens": specs.allergens,
                 "disliked_foods": specs.disliked_foods,
                 "preferred_foods": specs.preferred_foods,
+                "below_range_lab_food_focuses": specs.lab_food_focuses,
                 "budget": specs.budget,
             },
             "calorie_and_macro_targets": {
@@ -418,6 +421,11 @@ class OpenAIDietPlanGenerator:
             f"{specs.meals_per_day} meal(s). "
             "Respect allergens, dietary restrictions, disliked foods, preferred foods, "
             "budget, calories, and macros. Use realistic normal foods and quantities. "
+            "When below-range lab food focuses are provided, include ordinary foods "
+            "rich in those nutrient focuses where compatible; do not frame this as "
+            "diagnosis, treatment, or supplement advice. "
+            "Do not use pork by default; use chicken, beef, fish, eggs, dairy, "
+            "or legumes instead unless pork is explicitly allowed. "
             "Keep meal names, preparation steps, reasons, and notes concise. "
             "Do not provide diagnosis, disease treatment, supplement prescription, "
             "or clinical medical advice. Use the provided calorie and macro targets exactly. "
@@ -449,7 +457,7 @@ class OpenAIDietPlanGenerator:
                     },
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.3,
+                temperature=0.5,
                 max_completion_tokens=_max_completion_tokens(specs),
                 response_format={"type": "json_object"},
             )

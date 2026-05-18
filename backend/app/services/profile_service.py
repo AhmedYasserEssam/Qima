@@ -9,7 +9,8 @@ from app.db import SessionLocal, init_db
 from app.models.lab_report import LabReport, LabReportTest
 from app.models.nutrition_profile import NutritionProfile
 from app.models.user import User
-from app.schemas.v1.lab_report import LabReportReferenceInterval
+from app.parsers.lab_report_parser import classify_categorical_band_status
+from app.schemas.v1.lab_report import LabReportReferenceInterval, LabReportReferenceType
 from app.schemas.v1.profile import (
     NutritionProfileCreateUpdate,
     NutritionProfileResponse,
@@ -89,6 +90,15 @@ def _lab_result_response(*, report: LabReport, test: LabReportTest) -> ProfileLa
     result_value: float | str | None = test.result_value_numeric
     if result_value is None:
         result_value = test.result_value_text
+    status = test.status
+    if test.reference_interval_type == LabReportReferenceType.CATEGORICAL_BANDS.value:
+        status = (
+            classify_categorical_band_status(
+                canonical_test_key=test.canonical_test_key,
+                matched_band=test.matched_band,
+            )
+            or test.status
+        )
     return ProfileLabResult(
         report_id=report.id,
         test_name=test.test_name,
@@ -104,7 +114,7 @@ def _lab_result_response(*, report: LabReport, test: LabReportTest) -> ProfileLa
             operator=test.reference_operator,
             bands=test.reference_bands or [],
         ),
-        status=test.status,
+        status=status,
         matched_band=test.matched_band,
         confidence=test.confidence,
         confirmed_at=_naive_to_utc(report.confirmed_at),

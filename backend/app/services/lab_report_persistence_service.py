@@ -9,7 +9,11 @@ from sqlalchemy.orm import selectinload
 from app.db import SessionLocal, init_db
 from app.models.lab_report import LabReport, LabReportTest
 from app.models.user import User
-from app.parsers.lab_report_parser import classify_result, match_categorical_band
+from app.parsers.lab_report_parser import (
+    classify_categorical_band_status,
+    classify_categorical_result,
+    classify_result,
+)
 from app.schemas.v1.lab_report import (
     LabReportListResponse,
     LabReportRecord,
@@ -58,6 +62,7 @@ class LabReportPersistenceService:
         now = _utc_now_naive()
         try:
             with SessionLocal.begin() as session:
+                _backfill_vitamin_d_categorical_status(session)
                 report = LabReport(
                     user_id=user.id,
                     input_type=payload.input_type.value,
@@ -143,8 +148,8 @@ def _to_test_row(
     *, report_id: int, test: LabReportTestSchema, now: datetime
 ) -> LabReportTest:
     result_numeric, result_text = _split_result_value(test.result_value)
-    status = _status_for_test(test)
     matched_band = _matched_band_for_test(test)
+    status = _status_for_test(test, matched_band=matched_band)
     reference = test.reference_interval
     return LabReportTest(
         lab_report_id=report_id,
@@ -176,16 +181,26 @@ def _split_result_value(value: float | str | None) -> tuple[float | None, str | 
     return None, str(value)
 
 
-def _status_for_test(test: LabReportTestSchema) -> LabReportStatus:
+def _status_for_test(
+    test: LabReportTestSchema, *, matched_band: str | None
+) -> LabReportStatus:
     if test.reference_interval.type == LabReportReferenceType.CATEGORICAL_BANDS:
-        return LabReportStatus.INDETERMINATE
+        status = classify_categorical_band_status(
+            canonical_test_key=test.canonical_test_key,
+            matched_band=matched_band,
+        )
+        return status or LabReportStatus.INDETERMINATE
     return classify_result(test.result_value, test.reference_interval)
 
 
 def _matched_band_for_test(test: LabReportTestSchema) -> str | None:
     if test.reference_interval.type != LabReportReferenceType.CATEGORICAL_BANDS:
         return test.matched_band
-    return match_categorical_band(test.result_value, test.reference_interval.bands)
+    return classify_categorical_result(
+        canonical_test_key=test.canonical_test_key,
+        result_value=test.result_value,
+        bands=test.reference_interval.bands,
+    )[1]
 
 
 def _to_test_schema(row: LabReportTest) -> LabReportTestSchema:
@@ -200,6 +215,15 @@ def _to_test_schema(row: LabReportTest) -> LabReportTestSchema:
     result_value: float | str | None = row.result_value_numeric
     if result_value is None:
         result_value = row.result_value_text
+    status = row.status
+    if row.reference_interval_type == LabReportReferenceType.CATEGORICAL_BANDS.value:
+        status = (
+            classify_categorical_band_status(
+                canonical_test_key=row.canonical_test_key,
+                matched_band=row.matched_band,
+            )
+            or row.status
+        )
     return LabReportTestSchema(
         section=row.section,
         test_name=row.test_name,
@@ -207,11 +231,28 @@ def _to_test_schema(row: LabReportTest) -> LabReportTestSchema:
         result_value=result_value,
         unit=row.unit,
         reference_interval=reference_interval,
-        status=row.status,
+        status=status,
         matched_band=row.matched_band,
         raw_text=row.raw_text,
         confidence=row.confidence,
     )
+
+
+def _backfill_vitamin_d_categorical_status(session) -> None:
+    rows = session.execute(
+        select(LabReportTest).where(
+            LabReportTest.canonical_test_key == "vitamin_d_25oh_serum",
+            LabReportTest.reference_interval_type
+            == LabReportReferenceType.CATEGORICAL_BANDS.value,
+        )
+    ).scalars()
+    for row in rows:
+        status = classify_categorical_band_status(
+            canonical_test_key=row.canonical_test_key,
+            matched_band=row.matched_band,
+        )
+        if status is not None and row.status != status.value:
+            row.status = status.value
 
 
 lab_report_persistence_service = LabReportPersistenceService()

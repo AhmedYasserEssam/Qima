@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import (
     BaseModel,
@@ -255,6 +255,18 @@ class SafetyChecks(StrictBaseModel):
         return self
 
 
+class PlanLabMarker(StrictBaseModel):
+    report_id: int = Field(..., ge=1)
+    test_name: NonEmptyString
+    canonical_test_key: NonEmptyString
+    result_value: float | str | None
+    unit: str | None
+    reference_interval_raw: str | None
+    matched_band: str | None
+    confirmed_at: datetime | None
+    status: Literal["below_range"]
+
+
 class PlansGenerateRequest(StrictBaseModel):
     profile_id: ProfileId | None = None
     profile: Profile | None = None
@@ -264,6 +276,7 @@ class PlansGenerateRequest(StrictBaseModel):
     safety_checks: SafetyChecks | None = None
     dietary_filters: list[DietaryFilter] = Field(default_factory=list)
     plan_preferences: PlanPreferences | None = None
+    below_range_lab_markers: list[PlanLabMarker] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def require_exactly_one_profile_source(self) -> "PlansGenerateRequest":

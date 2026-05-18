@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import pytest
 
 from app.main import app
 from app.parsers.lab_report_parser import parse_lab_report_text
@@ -75,7 +76,38 @@ def test_parse_vitamin_d_categorical_bands() -> None:
     assert test.reference_interval.bands[1].low == 21
     assert test.reference_interval.bands[1].high == 29
     assert test.reference_interval.bands[3].low == 150
+    assert test.status == "below_range"
     assert test.matched_band == "Insufficiency"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_status", "expected_band"),
+    [
+        (12.0, "below_range", "Deficiency"),
+        (45.0, "within_range", "Sufficiency"),
+        (160.0, "above_range", "Hypervitaminosis"),
+    ],
+)
+def test_parse_vitamin_d_categorical_band_status(
+    value: float,
+    expected_status: str,
+    expected_band: str,
+) -> None:
+    result = parse_lab_report_text(
+        "\n".join(
+            [
+                "HORMONE UNIT",
+                f"25(OH) Vitamin D, Serum ng/mL {value} Deficiency <20",
+                "Insufficiency 21-29",
+                "Sufficiency 30-100",
+                "Hypervitaminosis >150",
+            ]
+        )
+    )
+
+    test = result.tests[0]
+    assert test.status == expected_status
+    assert test.matched_band == expected_band
 
 
 def test_parse_folic_acid_lower_bound_reference() -> None:
@@ -140,6 +172,7 @@ def test_parse_opendataloader_character_spaced_markdown_layout() -> None:
     assert by_key["calcium_total_serum"].status == "within_range"
     assert by_key["zinc_serum"].unit == "µg/dL"
     assert by_key["zinc_serum"].reference_interval.low == 50
+    assert by_key["vitamin_d_25oh_serum"].status == "below_range"
     assert by_key["vitamin_d_25oh_serum"].matched_band == "Insufficiency"
 
 

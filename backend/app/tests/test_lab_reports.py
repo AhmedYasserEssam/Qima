@@ -154,6 +154,51 @@ def _single_calcium_payload(*, value: float) -> dict:
     }
 
 
+def _other_categorical_payload() -> dict:
+    payload = _save_payload()
+    return {
+        **payload,
+        "sections_found": ["unknown"],
+        "raw_text_preview": "Other Marker units 12 Low <10 Normal 10-20",
+        "tests": [
+            {
+                "section": "unknown",
+                "test_name": "Other Marker",
+                "canonical_test_key": "other_categorical_marker",
+                "result_value": 12,
+                "unit": "units",
+                "reference_interval": {
+                    "raw": "Low <10\nNormal 10-20",
+                    "type": "categorical_bands",
+                    "low": None,
+                    "high": None,
+                    "operator": None,
+                    "bands": [
+                        {
+                            "label": "Low",
+                            "operator": "<",
+                            "low": None,
+                            "high": 10,
+                            "raw": "Low <10",
+                        },
+                        {
+                            "label": "Normal",
+                            "operator": None,
+                            "low": 10,
+                            "high": 20,
+                            "raw": "Normal 10-20",
+                        },
+                    ],
+                },
+                "status": "within_range",
+                "matched_band": None,
+                "raw_text": "Other Marker units 12 Low <10 Normal 10-20",
+                "confidence": 0.8,
+            }
+        ],
+    }
+
+
 def test_create_lab_report_creates_report_and_tests() -> None:
     headers, user_id, email = _auth_headers()
     try:
@@ -165,6 +210,7 @@ def test_create_lab_report_creates_report_and_tests() -> None:
         report_id = response.json()["report"]["id"]
         assert response.json()["report"]["source"]["extraction_method"] == "paddleocr"
         assert response.json()["report"]["tests"][0]["status"] == "within_range"
+        assert response.json()["report"]["tests"][1]["status"] == "below_range"
         assert response.json()["report"]["tests"][1]["matched_band"] == "Insufficiency"
 
         with SessionLocal() as session:
@@ -261,6 +307,13 @@ def test_profile_includes_latest_saved_lab_results() -> None:
         assert calcium["status"] == "within_range"
         assert calcium["reference_interval"]["raw"] == "8.8 - 10.6"
         assert calcium["confirmed_at"]
+        vitamin_d = next(
+            result
+            for result in lab_results
+            if result["canonical_test_key"] == "vitamin_d_25oh_serum"
+        )
+        assert vitamin_d["status"] == "below_range"
+        assert vitamin_d["matched_band"] == "Insufficiency"
     finally:
         _cleanup_user(email)
 
@@ -378,5 +431,52 @@ def test_json_fields_persist_sections_warnings_and_reference_bands() -> None:
         assert report.warnings == ["Reference interval missing for Ferritin, Serum."]
         assert vitamin_d.reference_bands[1]["label"] == "Insufficiency"
         assert vitamin_d.matched_band == "Insufficiency"
+        assert vitamin_d.status == "below_range"
+    finally:
+        _cleanup_user(email)
+
+
+def test_non_vitamin_d_categorical_status_remains_indeterminate() -> None:
+    headers, _, email = _auth_headers()
+    try:
+        created = client.post(
+            "/v1/labs/reports", json=_other_categorical_payload(), headers=headers
+        )
+
+        assert created.status_code == 201
+        test = created.json()["report"]["tests"][0]
+        assert test["matched_band"] == "Normal"
+        assert test["status"] == "indeterminate"
+    finally:
+        _cleanup_user(email)
+
+
+def test_init_db_backfills_existing_vitamin_d_categorical_status() -> None:
+    headers, _, email = _auth_headers()
+    try:
+        created = client.post("/v1/labs/reports", json=_save_payload(), headers=headers)
+        assert created.status_code == 201
+        report_id = created.json()["report"]["id"]
+
+        with SessionLocal.begin() as session:
+            vitamin_d = session.execute(
+                select(LabReportTest).where(
+                    LabReportTest.lab_report_id == report_id,
+                    LabReportTest.canonical_test_key == "vitamin_d_25oh_serum",
+                )
+            ).scalar_one()
+            vitamin_d.status = "indeterminate"
+
+        init_db()
+
+        with SessionLocal() as session:
+            vitamin_d = session.execute(
+                select(LabReportTest).where(
+                    LabReportTest.lab_report_id == report_id,
+                    LabReportTest.canonical_test_key == "vitamin_d_25oh_serum",
+                )
+            ).scalar_one()
+
+        assert vitamin_d.status == "below_range"
     finally:
         _cleanup_user(email)
