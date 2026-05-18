@@ -8,6 +8,17 @@ From this directory:
 
 ```bash
 flutter pub get
+flutter run
+```
+
+Default development URL behavior:
+
+- Android emulator: `http://10.0.2.2:8000`
+- Other platforms: `hs
+
+Override it explicitly whenever you need a different backend address:
+
+```bash
 flutter run --dart-define=QIMA_API_BASE_URL=http://127.0.0.1:8000
 ```
 

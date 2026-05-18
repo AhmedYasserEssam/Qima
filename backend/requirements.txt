@@ -24,3 +24,4 @@ pgvector>=0.3,<1.0
 scrapling[fetchers]>=0.4.7,<0.5
 groq
 python-dotenv
+openai

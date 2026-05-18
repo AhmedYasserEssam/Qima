@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import (
     BaseModel,
@@ -352,3 +352,4 @@ class PlansGenerateSuccess(StrictBaseModel):
     source: Source
     data_quality: DataQuality
     warnings: list[NonEmptyString] | None = None
+    generated_plan: dict[str, Any] | None = None

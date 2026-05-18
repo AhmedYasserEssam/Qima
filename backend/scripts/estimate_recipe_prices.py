@@ -45,7 +45,7 @@ def default_products_csv() -> Path:
         path = Path(raw_path)
         return path if path.is_absolute() else REPO_ROOT / path
 
-    return REPO_ROOT / "data" / "Food" / "carrefour_test.csv"
+    return REPO_ROOT.parent / "data" / "data" / "Food" / "selected_products7.csv"
 
 
 DEFAULT_PRODUCTS_CSV = default_products_csv()
@@ -199,6 +199,7 @@ DESCRIPTOR_TOKENS = {
     "whole", "grain", "grains", "fresh", "frozen", "white", "brown", "red",
     "green", "yellow", "black", "low", "fat", "full", "light", "lean",
     "raw", "cooked", "boneless", "bone", "in", "skinless", "skin",
+    "canned", "tinned",
 }
 
 # Product-name words that add noise during matching.
@@ -676,7 +677,11 @@ def find_best_product(products: pd.DataFrame, ingredient_name: str, needed_amoun
         if product_rejected_for_ingredient(str(ingredient_key), product_name_text):
             continue
 
-        score = similarity_score(query, product_text)
+        kind_query = " ".join(sorted(kind_tokens))
+        score = max(
+            similarity_score(query, product_text),
+            similarity_score(kind_query, product_text),
+        )
         product_name_tokens = set(str(product_name_text).split())
         if kind_tokens & product_name_tokens:
             score += 0.18

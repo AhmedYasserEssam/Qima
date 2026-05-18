@@ -28,8 +28,8 @@ The current architecture described in `Docs/Architecture_Updated_260422_v14.docx
   - packaged-food barcode lookup
 - `Google Gemini 2.5 Flash`
   - no-barcode food and meal image understanding
-- `Groq llama-3.1-8b-instant`
-  - grounded explanations, comparisons, recipe summary, and light adaptation
+- `OpenAI`
+  - diet-plan generation, grounded explanations, comparisons, recipe summary, and light adaptation
 - nutrition data layer
   - primary, localized, and fallback nutrition sources
 - recipe corpus
