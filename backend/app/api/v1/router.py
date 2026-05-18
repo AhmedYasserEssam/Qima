@@ -6,6 +6,8 @@ from app.api.v1.endpoints import (
     chat,
     health,
     inventory,
+    lab_report_extraction,
+    lab_reports,
     labs,
     nutrition,
     plans,
@@ -23,6 +25,8 @@ api_router.include_router(barcode.router, prefix="/barcode", tags=["barcode"])
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 api_router.include_router(inventory.router, prefix="/inventory", tags=["inventory"])
 api_router.include_router(labs.router, prefix="/labs", tags=["labs"])
+api_router.include_router(lab_report_extraction.router, prefix="/labs", tags=["labs"])
+api_router.include_router(lab_reports.router, prefix="/labs", tags=["labs"])
 api_router.include_router(nutrition.router, prefix="/nutrition", tags=["nutrition"])
 api_router.include_router(plans.router, prefix="/plans", tags=["plans"])
 api_router.include_router(prices.router, prefix="/prices", tags=["prices"])

@@ -12,6 +12,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_preview/device_preview.dart';
 import 'package:flutter/foundation.dart';
+import 'package:mobile/features/labs/data/lab_report_api_client.dart';
+import 'package:mobile/features/labs/screens/lab_report_extract_test_screen.dart';
 
 void main() {
   runApp(
@@ -224,6 +226,16 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/debug',
             builder: (context, state) => const DebugScreen(),
+          ),
+          GoRoute(
+            path: '/labs/extract-report-test',
+            builder: (context, state) => LabReportExtractTestScreen(
+              baseUrl: apiBaseUrl,
+              apiClient: LabReportApiClient(
+                baseUrl: apiBaseUrl,
+                authTokenReader: () => ref.read(authTokenProvider),
+              ),
+            ),
           ),
           GoRoute(
             path: '/barcode-scanner',
@@ -3411,6 +3423,23 @@ class _GuidanceScreenState extends ConsumerState<GuidanceScreen> {
             ],
           ),
         ),
+        InputCard(
+          title: 'Lab report extraction',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Upload a lab report PDF or page images and let the backend extract structured lab results.',
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () => context.go('/labs/extract-report-test'),
+                icon: const Icon(Icons.upload_file_outlined),
+                label: const Text('Open extraction test'),
+              ),
+            ],
+          ),
+        ),
         AsyncPayloadView(
           title: 'Lab response',
           value: ref.watch(labsControllerProvider),
@@ -3589,6 +3618,12 @@ class DebugScreen extends ConsumerWidget {
               ref.read(debugModeProvider.notifier).state = value,
         ),
         Text('API base URL: $apiBaseUrl'),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => context.go('/labs/extract-report-test'),
+          icon: const Icon(Icons.science_outlined),
+          label: const Text('Lab report extraction test'),
+        ),
         AsyncPayloadView(
           title: 'Backend health',
           value: health,
