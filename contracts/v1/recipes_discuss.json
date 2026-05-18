@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "contracts/v1/recipes_discuss.json",
   "title": "Recipe Discuss API Contract V1",
-  "description": "Contract-first schema for POST /v1/recipes/discuss request and response. This endpoint does not expose a numeric confidence field; grounding is represented through grounded_references and structured safety output.",
+  "description": "Contract-first schema for POST /v1/recipes/discuss request and response. The backend may use a server-side model after resolving local recipe context, but provider and model details are not exposed. This endpoint does not expose a numeric confidence field; grounding is represented through grounded_references and structured safety output.",
   "type": "object",
   "additionalProperties": false,
   "required": ["endpoint", "method", "request", "responses"],
@@ -79,7 +79,7 @@
         "candidate_context": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Structured recipe candidate context when no single recipe_id is available.",
+          "description": "Structured recipe candidate context from suggestions. May be sent with recipe_id so the backend can resolve the canonical recipe while preserving matched and missing ingredients.",
           "required": ["title"],
           "properties": {
             "title": {
@@ -102,6 +102,27 @@
             }
           }
         },
+        "conversation_history": {
+          "type": "array",
+          "description": "Recent client-held recipe discussion turns. Conversation memory is supplied by the client and is not persisted by this endpoint.",
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["role", "content"],
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": ["user", "assistant"]
+              },
+              "content": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            }
+          }
+        },
         "question": {
           "type": "string",
           "minLength": 1,
@@ -109,7 +130,7 @@
           "description": "User follow-up question about the recipe or candidate context."
         }
       },
-      "oneOf": [
+      "anyOf": [
         {
           "required": ["recipe_id"]
         },
@@ -247,6 +268,21 @@
         "contentType": "application/json",
         "body": {
           "recipe_id": "recipe_001",
+          "candidate_context": {
+            "title": "Tomato Lentil Skillet",
+            "matched_ingredients": ["lentils", "tomato"],
+            "missing_ingredients": ["butter"]
+          },
+          "conversation_history": [
+            {
+              "role": "user",
+              "content": "How do I make this step by step?"
+            },
+            {
+              "role": "assistant",
+              "content": "Start by preparing the listed ingredients, then follow the skillet steps in order."
+            }
+          ],
           "question": "Can I replace butter with olive oil in this recipe?"
         }
       },
@@ -285,7 +321,7 @@
           "body": {
             "error": {
               "code": "BAD_REQUEST",
-              "message": "Request must include exactly one of recipe_id or candidate_context, plus a question.",
+              "message": "Request must include recipe_id or candidate_context, plus a question.",
               "retryable": false,
               "request_id": "req_30001"
             }
@@ -405,7 +441,7 @@
           "body": {
             "error": {
               "code": "BAD_REQUEST",
-              "message": "Request must include exactly one of recipe_id or candidate_context, plus a question.",
+              "message": "Request must include recipe_id or candidate_context, plus a question.",
               "retryable": false,
               "request_id": "req_30011"
             }

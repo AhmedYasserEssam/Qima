@@ -233,6 +233,7 @@ All non-200 responses must follow:
     "details": {}
   }
 }
+
 ```
 ## HTTP Status Mapping
 

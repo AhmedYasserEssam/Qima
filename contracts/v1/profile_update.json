@@ -56,6 +56,7 @@
     "ProfileUpdateRequest": {
       "type": "object",
       "additionalProperties": false,
+      "required": ["safety_screening", "agreement_accepted"],
       "properties": {
         "profile_id": {
           "type": ["string", "null"],
@@ -96,7 +97,6 @@
             "gain_muscle",
             "maintain_weight",
             "improve_general_health",
-            "budget_friendly_eating",
             null
           ]
         },
@@ -124,6 +124,14 @@
           "items": {
             "$ref": "#/$defs/ExclusionFlag"
           }
+        },
+        "safety_screening": {
+          "$ref": "#/$defs/SafetyScreening"
+        },
+        "agreement_accepted": {
+          "type": "boolean",
+          "const": true,
+          "description": "Must be true after the user reads and accepts the Qima AI Nutrition Disclaimer & User Agreement."
         }
       }
     },
@@ -187,7 +195,9 @@
         "allergens",
         "dietary_exclusions",
         "dietary_preferences",
-        "exclusion_flags"
+        "exclusion_flags",
+        "safety_screening",
+        "agreement_accepted"
       ],
       "properties": {
         "age_years": {
@@ -224,7 +234,6 @@
             "gain_muscle",
             "maintain_weight",
             "improve_general_health",
-            "budget_friendly_eating",
             null
           ]
         },
@@ -251,6 +260,12 @@
           "items": {
             "$ref": "#/$defs/ExclusionFlag"
           }
+        },
+        "safety_screening": {
+          "$ref": "#/$defs/SafetyScreening"
+        },
+        "agreement_accepted": {
+          "type": "boolean"
         }
       }
     },
@@ -298,7 +313,6 @@
         "high_fiber",
         "low_sugar",
         "low_sodium",
-        "budget_friendly",
         "egyptian_foods",
         "quick_meals"
       ]
@@ -314,6 +328,50 @@
         "diabetes",
         "other_clinical_condition"
       ]
+    },
+    "SafetyScreening": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pregnant",
+        "breastfeeding",
+        "eating_disorder_history",
+        "under_18",
+        "medical_condition_affects_diet",
+        "abnormal_labs_or_health_concerns",
+        "none_of_above"
+      ],
+      "properties": {
+        "pregnant": {
+          "type": "boolean",
+          "default": false
+        },
+        "breastfeeding": {
+          "type": "boolean",
+          "default": false
+        },
+        "eating_disorder_history": {
+          "type": "boolean",
+          "default": false
+        },
+        "under_18": {
+          "type": "boolean",
+          "default": false
+        },
+        "medical_condition_affects_diet": {
+          "type": "boolean",
+          "default": false
+        },
+        "abnormal_labs_or_health_concerns": {
+          "type": "boolean",
+          "default": false
+        },
+        "none_of_above": {
+          "type": "boolean",
+          "default": false,
+          "description": "Mutually exclusive with all other safety screening options."
+        }
+      }
     },
     "ValidationFlag": {
       "type": "string",
@@ -384,8 +442,18 @@
           "goal": "gain_muscle",
           "allergens": ["peanuts"],
           "dietary_exclusions": ["pork"],
-          "dietary_preferences": ["halal", "high_protein", "budget_friendly"],
-          "exclusion_flags": []
+          "dietary_preferences": ["halal", "high_protein"],
+          "exclusion_flags": [],
+          "safety_screening": {
+            "pregnant": false,
+            "breastfeeding": false,
+            "eating_disorder_history": false,
+            "under_18": false,
+            "medical_condition_affects_diet": false,
+            "abnormal_labs_or_health_concerns": false,
+            "none_of_above": true
+          },
+          "agreement_accepted": true
         }
       },
       "responses": {
@@ -402,8 +470,18 @@
               "goal": "gain_muscle",
               "allergens": ["peanuts"],
               "dietary_exclusions": ["pork"],
-              "dietary_preferences": ["halal", "high_protein", "budget_friendly"],
-              "exclusion_flags": []
+              "dietary_preferences": ["halal", "high_protein"],
+              "exclusion_flags": [],
+              "safety_screening": {
+                "pregnant": false,
+                "breastfeeding": false,
+                "eating_disorder_history": false,
+                "under_18": false,
+                "medical_condition_affects_diet": false,
+                "abnormal_labs_or_health_concerns": false,
+                "none_of_above": true
+              },
+              "agreement_accepted": true
             },
             "validation_flags": [],
             "limitation_flags": ["guest_or_session_scoped"],

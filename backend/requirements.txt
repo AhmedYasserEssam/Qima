@@ -7,3 +7,24 @@ pydantic-settings>=2.2,<3.0
 python-dotenv>=1.0,<2.0
 httpx>=0.27,<1.0
 python-multipart>=0.0.9,<1.0
+passlib[bcrypt]>=1.7,<2.0
+bcrypt==4.0.1
+python-jose[cryptography]>=3.3,<4.0
+email-validator>=2.2,<3.0
+pandas>=2.2,<3.0
+openpyxl>=3.1,<4.0
+rapidfuzz>=3.9,<4.0
+numpy>=1.26,<3.0
+sentence-transformers>=3.0,<6.0
+pgvector>=0.3,<1.0
+
+# Web scraping / browser automation
+# If you install any `scrapling[...]` extras, make sure you run `scrapling install`
+# to install browser dependencies.
+scrapling[fetchers]>=0.4.7,<0.5
+groq
+python-dotenv
+openai
+opendataloader-pdf>=0.1
+paddleocr>=3.0,<4.0
+paddlepaddle>=3.0,<4.0

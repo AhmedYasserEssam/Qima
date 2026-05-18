@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "contracts/v1/prices_estimate.json",
   "title": "Prices Estimate API Contract V1",
-  "description": "Contract-first schema for POST /v1/prices/estimate request and response. Estimates ingredient and recipe cost using backend-normalized Egyptian ingredient price data.",
+  "description": "Contract-first schema for POST /v1/prices/estimate request and response. Estimates ingredient and recipe cost using Carrefour Egypt product price data.",
   "type": "object",
   "additionalProperties": false,
   "required": ["endpoint", "method", "request", "responses"],
@@ -74,7 +74,7 @@
         },
         "recipe_id": {
           "type": "string",
-          "pattern": "^recipe_[a-zA-Z0-9_\\-]{6,}$",
+          "minLength": 1,
           "description": "Backend recipe identifier when estimate_type is recipe_id."
         },
         "servings": {
@@ -144,17 +144,30 @@
         "enum": [
             "g",
             "kg",
+            "mg",
             "ml",
             "l",
             "piece",
             "tbsp",
+            "tablespoon",
             "tsp",
+            "teaspoon",
             "cup",
             "pack",
+            "packet",
+            "package",
             "can",
+            "jar",
+            "bottle",
+            "box",
+            "bag",
             "bunch",
             "clove",
-            "head"
+            "head",
+            "oz",
+            "ounce",
+            "lb",
+            "pound"
         ]
     },
     "PricesEstimateSuccess": {
@@ -273,6 +286,30 @@
             "type": "string",
             "minLength": 1
           }
+        },
+        "product_price": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "Matched Carrefour package/product price in EGP."
+        },
+        "product_package_quantity": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "Matched package quantity parsed from the product name when available."
+        },
+        "product_package_unit": {
+          "anyOf": [
+            { "$ref": "#/$defs/Unit" },
+            { "type": "null" }
+          ]
+        },
+        "match_score": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "pricing_method": {
+          "type": ["string", "null"]
         }
       }
     },
@@ -299,7 +336,7 @@
       "properties": {
         "provider": {
           "type": "string",
-          "enum": ["egyptian_ingredient_price_kb"]
+          "enum": ["egyptian_ingredient_price_kb", "carrefour_egypt"]
         },
         "source_type": {
           "type": "string",

@@ -1,166 +1,170 @@
 # Qima
 
-Qima is an AI-powered nutrition assistant focused on two main user journeys:
+Qima is a Flutter + FastAPI nutrition assistant. The mobile app calls the
+backend only; provider API keys and model integrations stay server-side.
 
-- packaged-food understanding through barcode lookup
-- non-barcode food understanding through image-based recognition
+Current user flows include:
 
-The current project baseline also includes a recipe-assistance layer that operates in a retrieval-first manner after ingredient or dish recognition.
+- barcode lookup for packaged foods
+- food image recognition and nutrition estimation
+- inventory-based recipe suggestions with ingredient quantities
+- grounded recipe discussion
+- profile setup and authentication
+- lab report scanning, saved lab marker history, and latest marker summaries
+- lab-informed meal planning that uses supported below-range markers as food
+  preferences, not diagnosis or supplement advice
 
-## Project Goal
+For a command-first setup, see [quickstart.md](quickstart.md).
 
-The system is intended to help users:
-
-- scan packaged foods and retrieve normalized nutrition, ingredient, and allergen information
-- upload meal images and receive recognized dish candidates plus estimated nutrients
-- compare foods or meals using grounded nutrition data
-- get recipe suggestions and follow-up recipe assistance based on recognized ingredients or pantry items
-
-## Architecture Overview
-
-The current architecture described in `Docs/Architecture_Updated_260422_v14.docx` is:
-
-- `Flutter` mobile client
-  - camera, barcode scan, UI, session state, API calls
-- `Python + FastAPI` backend
-  - orchestration, normalization, caching, persistence, provider integration
-- `Open Food Facts API`
-  - packaged-food barcode lookup
-- `Google Gemini 2.5 Flash`
-  - no-barcode food and meal image understanding
-- `Groq llama-3.1-8b-instant`
-  - grounded explanations, comparisons, recipe summary, and light adaptation
-- nutrition data layer
-  - primary, localized, and fallback nutrition sources
-- recipe corpus
-  - retrieval-first recipe suggestions and grounded recipe discussion
-- budget-aware meal planning layer
-  - Egyptian ingredient price awareness, estimated recipe cost, and price-aware ranking
-- personalized nutrition guidance layer
-  - goal-based meal guidance and narrow lab-marker-informed food recommendations within non-diagnostic boundaries
-
-## Nutrition Data Sources
-
-The backend nutrition source hierarchy is currently:
-
-1. `data/Food/nutrition.xlsx`
-   Primary generic food nutrient dataset
-2. `data/Food/Egyptian Food.csv`
-   Egyptian food and localized dish coverage
-3. `data/Food/FoodData_Central_foundation_food_json_2025-12-18.json`
-   Fallback source
-4. `data/Food/FoodData_Central_sr_legacy_food_json_2018-04.json`
-   Fallback source
-
-In practice:
-
-- `nutrition.xlsx` is the first lookup for general foods
-- `Egyptian Food.csv` is used for Egyptian foods and localized meal grounding
-- FoodData Central Foundation and SR Legacy are used when the primary sources do not provide a usable match
-
-## Planned Request Flows
-
-### 1. Barcode Product Lookup
-
-- User scans a barcode in Flutter
-- Flutter sends the barcode to FastAPI
-- FastAPI queries Open Food Facts
-- Backend normalizes nutrition, ingredients, and allergens
-- Normalized response is returned to the client
-
-### 2. No-Barcode Meal Recognition
-
-- User uploads an image in Flutter
-- FastAPI sends the image to Gemini 2.5 Flash
-- Backend extracts structured dish candidates, ingredients, and confidence
-- Backend maps recognized foods through the nutrition source hierarchy
-- Backend returns nutrient estimates plus confidence and source metadata
-
-### 3. Nutrition Estimation
-
-Planned backend contract includes:
-
-- `/v1/nutrition/estimate`
-
-Expected output shape includes:
-
-- matched dish or food
-- serving assumptions
-- nutrients
-- confidence
-- source metadata
-
-### 4. Recipe Assistance
-
-The recipe layer is not a free-form generation system by default.
-
-It is designed as:
-
-- retrieval-first recipe suggestion
-- grounded recipe summary and explanation
-- light adaptation of retrieved candidates
-
-## Repository Structure
+## Architecture
 
 ```text
 Qima/
-├── data/
-│   ├── Food/
-│   │   ├── nutrition.xlsx
-│   │   ├── Egyptian Food.csv
-│   │   ├── FoodData_Central_foundation_food_json_2025-12-18.json
-│   │   └── FoodData_Central_sr_legacy_food_json_2018-04.json
-│   └── Recipes/
-│       └── 13k-recipes.csv
-├── Docs/
-│   ├── Architecture_Updated_260422_v14.docx
-│   └── Decision_Log_Updated_260422_v14.docx
-├── .gitignore
-└── LICENSE
+|-- backend/        FastAPI app, services, schemas, tests, DB setup
+|-- mobile/         Flutter app for Android, web, and other Flutter targets
+|-- contracts/      Versioned API contract examples/schemas
+|-- data/           Local food and recipe datasets
+|-- scrappers/      Carrefour scraping pipeline
+|-- airflow/        Optional monthly Carrefour refresh orchestration
+|-- Docs/           Architecture and decision documents
+|-- groqApi.py      LLM integration helper used by plan/recipe flows
+|-- docker-compose.yml
+`-- quickstart.md
+```
+
+## Backend
+
+The backend is a FastAPI API under `backend/app`.
+
+Important endpoints include:
+
+- `GET /v1/health`
+- `POST /v1/auth/signup`
+- `POST /v1/auth/login`
+- `GET /v1/profile/me`
+- `POST /v1/profile/update`
+- `POST /v1/barcode/lookup`
+- `POST /v1/vision/identify`
+- `POST /v1/nutrition/estimate`
+- `POST /v1/recipes/suggest`
+- `POST /v1/recipes/discuss`
+- `POST /v1/labs/extract-report`
+- `POST /v1/labs/reports`
+- `POST /v1/plans/generate`
+
+Backend environment is configured through `backend/.env`. Start from
+`backend/.env.example`.
+
+Required for normal local development:
+
+- `DATABASE_URL`
+- `JWT_SECRET`
+
+Required for provider-backed features:
+
+- `GEMINI_API_KEY` for vision identification
+- `GROQ_API_KEY` or `OPENAI_API_KEY` for LLM-backed recipe/plan flows,
+  depending on the configured provider
+
+The backend can still return local fallback responses for some flows when an LLM
+provider is not configured, but provider-backed endpoints will be limited.
+
+## Mobile
+
+The Flutter app lives in `mobile/`.
+
+The app reads the backend URL from the compile-time define
+`QIMA_API_BASE_URL`. Use an explicit value whenever running against a non-default
+backend port or a physical device.
+
+Examples:
+
+```powershell
+flutter run -d chrome --dart-define=QIMA_API_BASE_URL=http://127.0.0.1:8001
+flutter run -d emulator-5554 --dart-define=QIMA_API_BASE_URL=http://10.0.2.2:8001
+flutter run -d R5CY82RV2RJ --dart-define=QIMA_API_BASE_URL=http://127.0.0.1:8001
+```
+
+For a physical Android phone over USB, use `adb reverse` first:
+
+```powershell
+adb -s <device-id> reverse tcp:8001 tcp:8001
+```
+
+This lets the phone call `http://127.0.0.1:8001` and have it forward to the
+laptop backend.
+
+## Local Data
+
+The backend uses local food and recipe data where available:
+
+- `data/Food/nutrition.xlsx`
+- `data/Food/Egyptian Food.csv`
+- FoodData Central JSON sources under `data/Food/`
+- `data/Recipes/13k-recipes.csv`
+
+Large/generated datasets are ignored by default unless already tracked.
+
+## Database
+
+The included Docker Compose file starts Postgres with pgvector:
+
+```powershell
+docker compose up -d db
+```
+
+Default local connection from `backend/.env.example`:
+
+```text
+postgresql://qima_user:qima_password@127.0.0.1:15432/qima
+```
+
+`backend/app/db.py` initializes the app tables on startup.
+
+## Carrefour Pipeline
+
+Carrefour packaged-food data is managed through a DB-first scraper flow.
+
+- scraper: `scrappers/scrape_carrefour_food.py`
+- table: `carrefour_barcode_products`
+- upsert strategy: `ON CONFLICT (barcode) DO UPDATE`
+
+Optional Airflow orchestration lives under `airflow/`.
+
+## Validation
+
+Backend:
+
+```powershell
+$env:PYTHONPATH = "backend"
+pytest backend/app/tests
+```
+
+Mobile:
+
+```powershell
+cd mobile
+flutter analyze
+flutter test
 ```
 
 ## Design Rules
 
-The current architecture baseline establishes these constraints:
+- Flutter calls FastAPI only.
+- Provider keys and provider SDK/API calls stay in the backend.
+- API response shapes should remain contract-first and versioned.
+- Recipe flows should stay retrieval-grounded when possible.
+- Lab-marker-informed guidance must remain food-oriented, supported-marker
+  based, and non-diagnostic.
+- Abnormal lab markers are displayed and may inform food focus where supported;
+  they do not automatically mutate safety screening answers.
 
-- Flutter should call backend endpoints only
-- provider integrations stay in the backend
-- barcode and non-barcode flows remain separate upstream
-- all nutrition responses should be normalized into one backend-owned schema
-- recipe outputs should remain grounded in retrieved recipe data
-- price, lab-marker, and goal-based recommendation layers remain backend-managed and contract-first
-- lab-marker-informed guidance must stay food-oriented, whitelist-based, and non-diagnostic
+## More Docs
 
-## Current Status
-
-At the moment, this repository primarily contains:
-
-- architecture and decision documentation
-- food and recipe datasets
-- project-level Git configuration
-
-The README should be updated as implementation files for the mobile client, backend API, schemas, and matching logic are added.
-
-## Contributing
-
-Before contributing, read:
-
+- [quickstart.md](quickstart.md)
+- `backend/README.md`
+- `backend/AUTH_PROFILE_GUIDE.md`
+- `mobile/README.md`
+- `mobile/ANDROID_TESTING.md`
 - `Docs/Architecture_Updated_260422_v14.docx`
 - `Docs/Decision_Log_Updated_260422_v14.docx`
-
-All contributions must follow the architecture and design rules documented there.
-
-### Branching Strategy
-
-This repository uses:
-
-- `main` — protected, release-ready only
-- `develop` — protected, shared integration branch
-
-All work should be done on short-lived feature branches created from `develop`.
-
-Branch naming pattern:
-
-```text
-<workstream>/<issue-number>-<short-name>
-

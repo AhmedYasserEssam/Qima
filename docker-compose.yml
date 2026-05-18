@@ -1,0 +1,15 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: qima_postgres
+    environment:
+      POSTGRES_DB: qima
+      POSTGRES_USER: qima_user
+      POSTGRES_PASSWORD: qima_password
+    ports:
+      - "15432:5432"
+    volumes:
+      - qima_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  qima_postgres_data:
