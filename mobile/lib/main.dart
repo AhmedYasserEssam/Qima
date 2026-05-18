@@ -1864,9 +1864,11 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
   final manualInventoryController = TextEditingController();
   final recipeIdController = TextEditingController(text: 'recipe_stub_001');
   final questionController = TextEditingController(
-    text: 'Can you make this recipe more price friendly?',
+    text: 'How do I make this recipe step by step?',
   );
   final Set<int> selectedInventoryItemIds = <int>{};
+  final List<RecipeChatTurn> recipeChatTranscript = <RecipeChatTurn>[];
+  RecipeSuggestionRecord? selectedRecipe;
   String budgetLevel = 'mid';
 
   @override
@@ -1896,6 +1898,11 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
         inventoryState.valueOrNull ?? const <InventoryItemRecord>[];
     final inventoryLoading = inventoryState.isLoading;
     final inventoryError = inventoryState.error;
+    final recipeState = ref.watch(recipeControllerProvider);
+    final discussionState = ref.watch(recipeDiscussControllerProvider);
+    final recipeSuggestions = recipeSuggestionsFromPayload(
+      recipeState?.valueOrNull?.raw,
+    );
     final selectedVisionIngredients = ref.watch(
       selectedVisionIngredientsProvider,
     );
@@ -2102,7 +2109,7 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
               ],
               const SizedBox(height: 8),
               FilledButton.icon(
-                onPressed: _suggest,
+                onPressed: () => unawaited(_suggest()),
                 icon: const Icon(Icons.restaurant_menu_outlined),
                 label: const Text('Suggest recipes'),
               ),
@@ -2111,14 +2118,68 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
         ),
         AsyncPayloadView(
           title: 'Recipe suggestions',
-          value: ref.watch(recipeControllerProvider),
-          onRetry: _suggest,
+          value: recipeState,
+          onRetry: () => unawaited(_suggest()),
+        ),
+        RecipeSuggestionPicker(
+          recipes: recipeSuggestions,
+          selectedRecipeId: selectedRecipe?.recipeId,
+          onSelected: _selectRecipeSuggestion,
         ),
         InputCard(
-          title: 'Recipe discussion',
+          title: 'Recipe chatbot',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (selectedRecipe != null) ...[
+                Row(
+                  children: [
+                    const Icon(Icons.restaurant_menu_outlined),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        selectedRecipe!.title,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  selectedRecipe!.summary,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+              ],
+              RecipeChatTranscriptView(turns: recipeChatTranscript),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ActionChip(
+                    avatar: const Icon(Icons.format_list_numbered, size: 18),
+                    label: const Text('Step by step'),
+                    onPressed: () =>
+                        _setQuestion('How do I make this recipe step by step?'),
+                  ),
+                  ActionChip(
+                    avatar: const Icon(Icons.swap_horiz, size: 18),
+                    label: const Text('Substitutions'),
+                    onPressed: () => _setQuestion(
+                      'What can I substitute for the missing ingredients?',
+                    ),
+                  ),
+                  ActionChip(
+                    avatar: const Icon(Icons.kitchen_outlined, size: 18),
+                    label: const Text('Use my ingredients'),
+                    onPressed: () => _setQuestion(
+                      'How should I use the ingredients I already have?',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
               TextFormField(
                 controller: recipeIdController,
                 decoration: const InputDecoration(labelText: 'Recipe id'),
@@ -2126,10 +2187,12 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
               TextFormField(
                 controller: questionController,
                 decoration: const InputDecoration(labelText: 'Question'),
+                minLines: 2,
+                maxLines: 4,
               ),
               const SizedBox(height: 8),
               FilledButton.icon(
-                onPressed: _discuss,
+                onPressed: () => unawaited(_discuss()),
                 icon: const Icon(Icons.forum_outlined),
                 label: const Text('Discuss recipe'),
               ),
@@ -2138,8 +2201,8 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
         ),
         AsyncPayloadView(
           title: 'Recipe discussion',
-          value: ref.watch(recipeDiscussControllerProvider),
-          onRetry: _discuss,
+          value: discussionState,
+          onRetry: () => unawaited(_discuss()),
         ),
       ],
     );
@@ -2246,7 +2309,7 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
     }
   }
 
-  void _suggest() {
+  Future<void> _suggest() async {
     final pantryItems = _items();
     final availableItems =
         ref.read(inventoryControllerProvider).valueOrNull ??
@@ -2281,7 +2344,7 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
         ? '/v1/recipes/suggest?debug=true'
         : '/v1/recipes/suggest';
 
-    ref
+    final payload = await ref
         .read(recipeControllerProvider.notifier)
         .run(
           (client) => client.post(
@@ -2291,6 +2354,13 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
             timeout: ApiClient.recipeTimeout,
           ),
         );
+    if (!mounted || payload == null) {
+      return;
+    }
+    final suggestions = recipeSuggestionsFromPayload(payload.raw);
+    if (suggestions.isNotEmpty) {
+      _selectRecipeSuggestion(suggestions.first);
+    }
   }
 
   List<String> _selectedImageInventoryIngredients(
@@ -2343,42 +2413,210 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
     return merged;
   }
 
-  void _discuss() {
+  Future<void> _discuss() async {
     final question = questionController.text.trim();
     if (question.isEmpty) {
       showValidation(context, 'Question is required.');
       return;
     }
-    ref
+    final recipeForRequest = _selectedRecipeForDiscussion();
+    final payload = await ref
         .read(recipeDiscussControllerProvider.notifier)
         .run(
           (client) => client.post(
             '/v1/recipes/discuss',
-            {
-              'recipe_id': recipeIdController.text.trim().isEmpty
+            buildRecipeDiscussRequestBody(
+              recipeId: recipeIdController.text.trim().isEmpty
                   ? 'recipe_stub_001'
                   : recipeIdController.text.trim(),
-              'question': question,
-              'conversation_intent': _priceIntent(question)
-                  ? 'reduce_cost'
-                  : 'explain_recipe',
-              'price_context': _priceContext(),
-            },
+              selectedRecipe: recipeForRequest,
+              question: question,
+              conversationHistory: recipeChatTranscript,
+            ),
             requiredFields: ['answer', 'grounded_references', 'safety_flags'],
+            timeout: ApiClient.recipeTimeout,
           ),
         );
+    if (!mounted || payload == null) {
+      return;
+    }
+    final answer = text(payload.raw['answer'], fallback: '').trim();
+    if (answer.isEmpty) {
+      return;
+    }
+    setState(() {
+      recipeChatTranscript.add(RecipeChatTurn(role: 'user', content: question));
+      recipeChatTranscript.add(
+        RecipeChatTurn(role: 'assistant', content: answer),
+      );
+      questionController.clear();
+    });
   }
 
-  Map<String, Object?> _priceContext() {
-    final selectedIds = selectedInventoryItemIds.toList();
-    return {
-      'budget_level': budgetLevel,
-      'inventory_item_ids': selectedIds,
-      'pantry_items': _items(),
-      'latest_recipe_suggestions':
-          ref.read(recipeControllerProvider)?.valueOrNull?.raw['recipes'] ??
-          <Object?>[],
-    };
+  RecipeSuggestionRecord? _selectedRecipeForDiscussion() {
+    final recipe = selectedRecipe;
+    if (recipe == null) {
+      return null;
+    }
+    final currentRecipeId = recipeIdController.text.trim();
+    if (currentRecipeId.isEmpty || currentRecipeId == recipe.recipeId) {
+      return recipe;
+    }
+    return null;
+  }
+
+  void _selectRecipeSuggestion(RecipeSuggestionRecord recipe) {
+    ref.read(recipeDiscussControllerProvider.notifier).clear();
+    setState(() {
+      selectedRecipe = recipe;
+      recipeIdController.text = recipe.recipeId;
+      recipeChatTranscript.clear();
+      questionController.text = 'How do I make this recipe step by step?';
+      questionController.selection = TextSelection.collapsed(
+        offset: questionController.text.length,
+      );
+    });
+  }
+
+  void _setQuestion(String value) {
+    questionController.text = value;
+    questionController.selection = TextSelection.collapsed(
+      offset: value.length,
+    );
+  }
+}
+
+class RecipeSuggestionPicker extends StatelessWidget {
+  const RecipeSuggestionPicker({
+    super.key,
+    required this.recipes,
+    required this.selectedRecipeId,
+    required this.onSelected,
+  });
+
+  final List<RecipeSuggestionRecord> recipes;
+  final String? selectedRecipeId;
+  final ValueChanged<RecipeSuggestionRecord> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    if (recipes.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final colors = Theme.of(context).colorScheme;
+    return InputCard(
+      title: 'Selected suggested recipe',
+      child: Column(
+        children: [
+          for (final recipe in recipes)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Material(
+                color: recipe.recipeId == selectedRecipeId
+                    ? colors.primaryContainer
+                    : colors.surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(
+                    color: recipe.recipeId == selectedRecipeId
+                        ? colors.primary
+                        : colors.outlineVariant,
+                  ),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => onSelected(recipe),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Icon(
+                          recipe.recipeId == selectedRecipeId
+                              ? Icons.check_circle
+                              : Icons.circle_outlined,
+                          color: recipe.recipeId == selectedRecipeId
+                              ? colors.primary
+                              : colors.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                recipe.title,
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                recipe.summary,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class RecipeChatTranscriptView extends StatelessWidget {
+  const RecipeChatTranscriptView({super.key, required this.turns});
+
+  final List<RecipeChatTurn> turns;
+
+  @override
+  Widget build(BuildContext context) {
+    if (turns.isEmpty) {
+      return Text(
+        'No recipe discussion yet.',
+        style: Theme.of(context).textTheme.bodyMedium,
+      );
+    }
+    final colors = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final turn in turns)
+          Align(
+            alignment: turn.role == 'user'
+                ? Alignment.centerRight
+                : Alignment.centerLeft,
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 560),
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: turn.role == 'user'
+                    ? colors.primaryContainer
+                    : colors.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    turn.role == 'user' ? 'You' : 'Qima',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(turn.content),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }
 
@@ -3844,6 +4082,7 @@ class VisionIdentifyResultView extends StatefulWidget {
 class _VisionIdentifyResultViewState extends State<VisionIdentifyResultView> {
   Set<String> _selectedIngredientKeys = <String>{};
   bool _submittingInventory = false;
+  bool _selectionNotificationScheduled = false;
 
   @override
   void initState() {
@@ -3870,7 +4109,7 @@ class _VisionIdentifyResultViewState extends State<VisionIdentifyResultView> {
     _selectedIngredientKeys = {
       for (final name in recognized) _normalizedVisionName(name),
     };
-    _notifySelectionChanged();
+    _scheduleSelectionChangedNotification();
   }
 
   List<String> _recognizedIngredientNames() {
@@ -3904,6 +4143,20 @@ class _VisionIdentifyResultViewState extends State<VisionIdentifyResultView> {
 
   void _notifySelectionChanged() {
     widget.onSelectionChanged?.call(_selectedIngredientNames());
+  }
+
+  void _scheduleSelectionChangedNotification() {
+    if (_selectionNotificationScheduled) {
+      return;
+    }
+    _selectionNotificationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _selectionNotificationScheduled = false;
+      if (!mounted) {
+        return;
+      }
+      _notifySelectionChanged();
+    });
   }
 
   @override
@@ -4717,6 +4970,47 @@ class InventoryImageSelection {
   final List<String> selectedIngredients;
 }
 
+class RecipeSuggestionRecord {
+  const RecipeSuggestionRecord({
+    required this.recipeId,
+    required this.title,
+    required this.matchScore,
+    required this.matchedIngredients,
+    required this.missingIngredients,
+  });
+
+  final String recipeId;
+  final String title;
+  final double? matchScore;
+  final List<String> matchedIngredients;
+  final List<String> missingIngredients;
+
+  String get summary {
+    final parts = <String>[];
+    if (matchScore != null) {
+      parts.add('Match ${(matchScore! * 100).toStringAsFixed(0)}%');
+    }
+    if (matchedIngredients.isNotEmpty) {
+      parts.add('Using ${matchedIngredients.take(4).join(', ')}');
+    }
+    if (missingIngredients.isNotEmpty) {
+      parts.add('Missing ${missingIngredients.take(4).join(', ')}');
+    }
+    return parts.isEmpty ? recipeId : parts.join(' | ');
+  }
+}
+
+class RecipeChatTurn {
+  const RecipeChatTurn({required this.role, required this.content});
+
+  final String role;
+  final String content;
+
+  Map<String, Object?> toRequestBody() {
+    return {'role': role, 'content': content};
+  }
+}
+
 List<InventoryItemRecord> inventoryItemsFromPayload(Map<String, Object?> raw) {
   final rawItems = raw['items'];
   if (rawItems is! List) {
@@ -4850,6 +5144,74 @@ Map<String, Object?> buildRecipeSuggestRequestBody({
     },
     'budget_level': normalizedBudget,
   };
+}
+
+List<RecipeSuggestionRecord> recipeSuggestionsFromPayload(
+  Map<String, Object?>? raw,
+) {
+  final rawRecipes = raw?['recipes'];
+  if (rawRecipes is! List) {
+    return const [];
+  }
+
+  final recipes = <RecipeSuggestionRecord>[];
+  for (final item in rawRecipes) {
+    if (item is! Map) {
+      continue;
+    }
+    final recipeId = text(item['recipe_id'], fallback: '').trim();
+    final title = text(item['title'], fallback: '').trim();
+    if (recipeId.isEmpty || title.isEmpty) {
+      continue;
+    }
+    recipes.add(
+      RecipeSuggestionRecord(
+        recipeId: recipeId,
+        title: title,
+        matchScore: number(item['match_score']),
+        matchedIngredients: textList(item['matched_ingredients']),
+        missingIngredients: textList(item['missing_ingredients']),
+      ),
+    );
+  }
+  return recipes;
+}
+
+Map<String, Object?> buildRecipeDiscussRequestBody({
+  required String recipeId,
+  required RecipeSuggestionRecord? selectedRecipe,
+  required String question,
+  required List<RecipeChatTurn> conversationHistory,
+}) {
+  final cleanedRecipeId = recipeId.trim();
+  final cleanedQuestion = question.trim();
+  final body = <String, Object?>{'question': cleanedQuestion};
+  if (cleanedRecipeId.isNotEmpty) {
+    body['recipe_id'] = cleanedRecipeId;
+  }
+  if (selectedRecipe != null) {
+    body['candidate_context'] = {
+      'title': selectedRecipe.title,
+      'matched_ingredients': selectedRecipe.matchedIngredients,
+      'missing_ingredients': selectedRecipe.missingIngredients,
+    };
+  }
+
+  final recentTurns = <Map<String, Object?>>[];
+  for (final turn in conversationHistory.reversed) {
+    if (recentTurns.length >= 8) {
+      break;
+    }
+    final role = turn.role.trim();
+    final content = turn.content.trim();
+    if ((role == 'user' || role == 'assistant') && content.isNotEmpty) {
+      recentTurns.add({'role': role, 'content': content});
+    }
+  }
+  if (recentTurns.isNotEmpty) {
+    body['conversation_history'] = recentTurns.reversed.toList();
+  }
+  return body;
 }
 
 String? inventoryBarcodeFromScanPayload(Map<String, Object?> raw) {
@@ -5620,24 +5982,6 @@ Map<String, Object?> priceBudgetContext({
     context['geography'] = geography;
   }
   return context;
-}
-
-bool _priceIntent(String question) {
-  final normalized = question.toLowerCase();
-  return [
-    'cheap',
-    'cheaper',
-    'budget',
-    'affordable',
-    'cost',
-    'price',
-    'expensive',
-    'friendly',
-    'under',
-    'save',
-    'substitute',
-    'replace',
-  ].any(normalized.contains);
 }
 
 List<DropdownMenuItem<String>> options(List<String> values) {

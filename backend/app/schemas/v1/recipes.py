@@ -80,11 +80,22 @@ class CandidateContext(BaseModel):
     missing_ingredients: list[str] = Field(default_factory=list)
 
 
+class ConversationTurn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant"]
+    content: str = Field(..., min_length=1, max_length=2000)
+
+
 class RecipeDiscussRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     recipe_id: str | None = Field(default=None, min_length=1)
     candidate_context: CandidateContext | None = None
+    conversation_history: list[ConversationTurn] = Field(
+        default_factory=list,
+        max_length=12,
+    )
     question: str = Field(..., min_length=1, max_length=2000)
 
     @model_validator(mode="after")
@@ -92,10 +103,8 @@ class RecipeDiscussRequest(BaseModel):
         has_recipe_id = self.recipe_id is not None
         has_candidate_context = self.candidate_context is not None
 
-        if has_recipe_id == has_candidate_context:
-            raise ValueError(
-                "exactly one of recipe_id or candidate_context is required"
-            )
+        if not has_recipe_id and not has_candidate_context:
+            raise ValueError("recipe_id or candidate_context is required")
 
         return self
 

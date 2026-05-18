@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+import json
 from pathlib import Path
+import time
 from typing import Any
 
+import httpx
 from sqlalchemy import text
 
+from app.core.config import get_settings
 from app.db import SessionLocal, init_db
 from app.normalizers.ingredient_normalizer import normalize_name
 from app.schemas.v1.recipes import (
+    CandidateContext,
+    ConversationTurn,
     GroundedReference,
     GroundingMetadata,
     RecipeCandidate,
@@ -18,9 +23,37 @@ from app.schemas.v1.recipes import (
 )
 from app.services.exceptions import NotFoundError, UpstreamUnavailableError
 from app.services.recipe_matching_service import recipe_matching_service
+from app.services.recipe_discussion import (
+    RecipeDiscussionClient,
+    get_recipe_discussion_client,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_ALLRECIPES_JSONL = REPO_ROOT / "data" / "Recipes" / "allrecipes_recipes.jsonl"
+OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
+
+RECIPE_DISCUSSION_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["answer"],
+    "properties": {
+        "answer": {
+            "type": "string",
+            "description": "A practical, grounded answer for the user's recipe question.",
+        }
+    },
+}
+
+RECIPE_DISCUSSION_INSTRUCTIONS = (
+    "You are Qima's recipe cooking assistant. Return JSON only, matching the "
+    "provided schema. Answer practical questions about the selected recipe using "
+    "only the supplied recipe context and conversation history. Help the user "
+    "understand how to use the given ingredients, step-by-step preparation, and "
+    "reasonable substitutions. If exact context is missing, say what is unknown "
+    "and give cautious general cooking guidance. Do not provide medical advice, "
+    "diagnose conditions, or claim allergy safety. For allergens or packaged "
+    "ingredients, remind the user to check labels and avoid unsafe substitutions."
+)
 
 
 @dataclass(frozen=True)
@@ -30,8 +63,116 @@ class RecipeSuggestResult:
     debug: dict[str, Any] | None = None
 
 
+class OpenAIRecipeDiscussionClient:
+    def __init__(
+        self,
+        *,
+        api_key: str | None = None,
+        model: str = "gpt-5-nano",
+        timeout_seconds: float = 20.0,
+        base_url: str = OPENAI_RESPONSES_URL,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self._api_key = (api_key or "").strip()
+        self._model = model.strip() or "gpt-5-nano"
+        self._timeout_seconds = timeout_seconds
+        self._base_url = base_url
+        self._transport = transport
+
+    async def generate_answer(self, prompt: str) -> str:
+        if not self._api_key:
+            raise UpstreamUnavailableError(
+                "Recipe discussion service is not configured."
+            )
+
+        payload = {
+            "model": self._model,
+            "instructions": RECIPE_DISCUSSION_INSTRUCTIONS,
+            "input": [
+                {
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": prompt}],
+                }
+            ],
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "recipe_discussion_answer",
+                    "strict": True,
+                    "schema": RECIPE_DISCUSSION_OUTPUT_SCHEMA,
+                }
+            },
+            "max_output_tokens": 900,
+            "store": False,
+        }
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=self._timeout_seconds,
+                transport=self._transport,
+            ) as client:
+                response = await client.post(
+                    self._base_url,
+                    headers={
+                        "Authorization": f"Bearer {self._api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
+        except httpx.TimeoutException as exc:
+            raise UpstreamUnavailableError(
+                "Recipe discussion service timed out."
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise UpstreamUnavailableError(
+                "Recipe discussion service is currently unavailable."
+            ) from exc
+
+        if response.status_code >= 400:
+            raise UpstreamUnavailableError(
+                "Recipe discussion service is currently unavailable."
+            )
+
+        try:
+            response_payload = response.json()
+        except ValueError as exc:
+            raise UpstreamUnavailableError(
+                "Recipe discussion service returned invalid JSON."
+            ) from exc
+
+        if response_payload.get("error"):
+            raise UpstreamUnavailableError(
+                "Recipe discussion service is currently unavailable."
+            )
+
+        output_text = _extract_openai_output_text(response_payload)
+        try:
+            parsed = json.loads(output_text)
+        except json.JSONDecodeError as exc:
+            raise UpstreamUnavailableError(
+                "Recipe discussion service returned an invalid structured response."
+            ) from exc
+
+        answer = (
+            str(parsed.get("answer") or "").strip()
+            if isinstance(parsed, dict)
+            else ""
+        )
+        if not answer:
+            raise UpstreamUnavailableError(
+                "Recipe discussion service returned an empty response."
+            )
+        return answer
+
+
 class RecipeService:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        discussion_client: RecipeDiscussionClient | None = None,
+    ) -> None:
+        settings = get_settings()
+        self._discussion_client = discussion_client or get_recipe_discussion_client(settings)
         self._initialized = False
 
     def _ensure_initialized(self) -> None:
@@ -90,15 +231,20 @@ class RecipeService:
             debug=matching_result.debug,
         )
 
-    def discuss_recipe(
+    async def discuss_recipe(
         self,
         *,
         recipe_id: str | None,
-        candidate_title: str | None,
+        candidate_context: CandidateContext | None,
         question: str,
+        conversation_history: list[ConversationTurn],
     ) -> RecipeDiscussResponse:
+        started_at = time.perf_counter()
         self._ensure_initialized()
-        row = self._resolve_recipe_row(recipe_id=recipe_id, candidate_title=candidate_title)
+        row = self._resolve_recipe_row(
+            recipe_id=recipe_id,
+            candidate_title=candidate_context.title if candidate_context else None,
+        )
         if row is None:
             raise NotFoundError("Recipe not found in allrecipes dataset.")
 
@@ -106,72 +252,51 @@ class RecipeService:
         servings = _to_float(row.get("servings"))
         total_minutes = _to_float(row.get("total_minutes"))
         ingredients = [display for display, _ in self._recipe_ingredient_names(row)]
-        first_step = self._first_direction_text(row)
-
-        answer_parts = [f"From Allrecipes: {title}."]
-        if servings is not None:
-            answer_parts.append(f"Serves about {servings:g}.")
-        if total_minutes is not None and total_minutes > 0:
-            answer_parts.append(f"Estimated total time is about {total_minutes:g} minutes.")
-        if ingredients:
-            answer_parts.append("Key ingredients: " + ", ".join(ingredients[:6]) + ".")
-        if first_step:
-            answer_parts.append("First step: " + first_step)
-        if question.strip():
-            answer_parts.append(
-                "This answer is grounded in the dataset recipe record you selected."
-            )
-
-        allergen_flags = _ensure_json_list(row.get("allergen_flags"))
-        allergen_names = [
-            str(item).strip()
-            for item in allergen_flags
-            if str(item).strip()
-        ]
-
-        references: list[GroundedReference] = [
-            GroundedReference(
-                recipe_id=self._public_recipe_id(row),
-                title=title,
-                reference_type="metadata",
-                reference_text="Allrecipes dataset record.",
-            )
-        ]
-        if ingredients:
-            references.append(
-                GroundedReference(
-                    recipe_id=self._public_recipe_id(row),
-                    title=title,
-                    reference_type="ingredient",
-                    reference_text=", ".join(ingredients[:5]),
-                )
-            )
-        if first_step:
-            references.append(
-                GroundedReference(
-                    recipe_id=self._public_recipe_id(row),
-                    title=title,
-                    reference_type="instruction",
-                    reference_text=first_step,
-                )
-            )
-
-        safety_notes: list[str] = []
-        if allergen_names:
-            safety_notes.append("Potential allergens: " + ", ".join(allergen_names))
+        direction_steps = self._direction_texts(row)
+        allergen_names = self._allergen_names(row)
+        recipe_context = {
+            "recipe_id": self._public_recipe_id(row),
+            "title": title,
+            "servings": servings,
+            "total_minutes": total_minutes,
+            "ingredients": ingredients[:40],
+            "directions": direction_steps[:12],
+            "allergen_flags": allergen_names,
+        }
+        match_context = {
+            "selected_candidate_context": (
+                candidate_context.model_dump(mode="json")
+                if candidate_context is not None
+                else None
+            ),
+            "recent_conversation": self._conversation_history_for_prompt(
+                conversation_history
+            ),
+        }
+        safety_context = {
+            "allergen_flags": allergen_names,
+        }
+        answer = await self._discussion_client.generate_answer(
+            question=question,
+            recipe_context=recipe_context,
+            match_context=match_context,
+            safety_context=safety_context,
+        )
 
         return RecipeDiscussResponse(
-            answer=" ".join(answer_parts),
-            grounded_references=references,
-            safety_flags=SafetyFlags(
-                allergen_risk=bool(allergen_names),
-                undercooked_risk=False,
-                cross_contamination_risk=False,
-                diet_conflict=False,
-                notes=safety_notes,
+            answer=answer,
+            grounded_references=self._discussion_references(
+                row=row,
+                title=title,
+                ingredients=ingredients,
+                direction_steps=direction_steps,
             ),
-            warnings=[],
-            latency_ms=120,
+            safety_flags=self._discussion_safety_flags(allergen_names),
+            warnings=self._discussion_warnings(
+                candidate_context=candidate_context,
+                direction_steps=direction_steps,
+            ),
+            latency_ms=max(0, int((time.perf_counter() - started_at) * 1000)),
         )
 
     def get_recipe_candidate(self, recipe_id: str) -> RecipeCandidate:
@@ -197,6 +322,97 @@ class RecipeService:
                 missing_count=0,
             ),
         )
+
+
+    def _conversation_history_for_prompt(
+        self,
+        conversation_history: list[ConversationTurn],
+    ) -> list[dict[str, str]]:
+        turns: list[dict[str, str]] = []
+        for turn in conversation_history[-8:]:
+            content = turn.content.strip()
+            if not content:
+                continue
+            turns.append({"role": turn.role, "content": content[:2000]})
+        return turns
+
+    def _allergen_names(self, row: dict[str, Any]) -> list[str]:
+        allergen_flags = _ensure_json_list(row.get("allergen_flags"))
+        return [
+            str(item).strip()
+            for item in allergen_flags
+            if str(item).strip()
+        ]
+
+    def _discussion_references(
+        self,
+        *,
+        row: dict[str, Any],
+        title: str,
+        ingredients: list[str],
+        direction_steps: list[str],
+    ) -> list[GroundedReference]:
+        public_recipe_id = self._public_recipe_id(row)
+        references: list[GroundedReference] = [
+            GroundedReference(
+                recipe_id=public_recipe_id,
+                title=title,
+                reference_type="metadata",
+                reference_text="Allrecipes dataset record.",
+            )
+        ]
+        if ingredients:
+            references.append(
+                GroundedReference(
+                    recipe_id=public_recipe_id,
+                    title=title,
+                    reference_type="ingredient",
+                    reference_text=", ".join(ingredients[:5]),
+                )
+            )
+        for step in direction_steps[:2]:
+            references.append(
+                GroundedReference(
+                    recipe_id=public_recipe_id,
+                    title=title,
+                    reference_type="instruction",
+                    reference_text=step,
+                )
+            )
+        return references
+
+    def _discussion_safety_flags(self, allergen_names: list[str]) -> SafetyFlags:
+        safety_notes: list[str] = []
+        if allergen_names:
+            safety_notes.append("Potential allergens: " + ", ".join(allergen_names))
+            safety_notes.append("Check packaged ingredient labels before substituting.")
+        return SafetyFlags(
+            allergen_risk=bool(allergen_names),
+            undercooked_risk=False,
+            cross_contamination_risk=False,
+            diet_conflict=False,
+            notes=safety_notes,
+        )
+
+    def _discussion_warnings(
+        self,
+        *,
+        candidate_context: CandidateContext | None,
+        direction_steps: list[str],
+    ) -> list[str]:
+        warnings: list[str] = []
+        if not direction_steps:
+            warnings.append(
+                "Recipe directions were unavailable, so preparation guidance may be incomplete."
+            )
+        missing = candidate_context.missing_ingredients if candidate_context else []
+        cleaned_missing = [item.strip() for item in missing if item.strip()]
+        if cleaned_missing:
+            warnings.append(
+                "Selected candidate context listed missing ingredients: "
+                + ", ".join(cleaned_missing[:8])
+            )
+        return warnings
 
     def _query_candidate_rows(
         self,
@@ -406,9 +622,19 @@ class RecipeService:
         return names
 
     def _first_direction_text(self, row: dict[str, Any]) -> str | None:
+        directions = self._direction_texts(row, limit=1)
+        return directions[0] if directions else None
+
+    def _direction_texts(
+        self,
+        row: dict[str, Any],
+        *,
+        limit: int = 12,
+    ) -> list[str]:
         directions = _ensure_json_list(row.get("directions_json"))
         if not directions:
-            return None
+            return []
+        texts: list[str] = []
         for item in directions:
             if not isinstance(item, dict):
                 continue
@@ -419,8 +645,10 @@ class RecipeService:
                 or ""
             ).strip()
             if text_value:
-                return text_value
-        return None
+                texts.append(text_value)
+                if len(texts) >= limit:
+                    break
+        return texts
 
     def _has_excluded_ingredient(
         self,
@@ -520,6 +748,8 @@ class RecipeService:
         if stable_slug:
             return stable_slug
         return str(row.get("source_url") or "unknown_recipe").strip() or "unknown_recipe"
+
+
 
 
 def _ensure_json_list(value: Any) -> list[Any]:

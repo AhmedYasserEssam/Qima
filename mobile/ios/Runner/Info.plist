@@ -26,6 +26,17 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Qima needs camera access to scan product barcodes and capture food photos.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Qima needs local network access to connect to the FastAPI backend during development testing.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Qima needs photo library access so you can upload food images for recognition.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -66,8 +77,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-
-	<key>NSCameraUsageDescription</key>
-	<string>Qima needs camera access to scan product barcodes.</string>
 </dict>
 </plist>

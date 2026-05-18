@@ -1,6 +1,11 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.schemas.v1.recipes import (
+    GroundedReference,
+    RecipeDiscussResponse,
+    SafetyFlags as RecipeSafetyFlags,
+)
 from app.services.exceptions import NotFoundError, UpstreamUnavailableError
 
 
@@ -22,11 +27,6 @@ def test_v1_post_endpoints_return_mock_responses() -> None:
             {"input_type": "recognized_dish", "recognized_dish": "Eggplant, raw"},
         ),
         ("post", "/v1/recipes/suggest", {"pantry_items": ["rice", "lentils"]}),
-        (
-            "post",
-            "/v1/recipes/discuss",
-            {"recipe_id": "recipe_stub_001", "question": "How do I prepare it?"},
-        ),
         (
             "post",
             "/v1/chat/query",
@@ -71,6 +71,133 @@ def test_v1_post_endpoints_return_mock_responses() -> None:
 
         assert response.status_code == 200, (path, response.text)
         assert response.json()
+
+
+def test_recipe_discuss_endpoint_accepts_recipe_id_only(monkeypatch) -> None:
+    async def fake_discuss_recipe(
+        *,
+        recipe_id,
+        candidate_context,
+        question,
+        conversation_history,
+    ):
+        assert recipe_id == "recipe_stub_001"
+        assert candidate_context is None
+        assert question == "How do I prepare it?"
+        assert conversation_history == []
+        return _recipe_discuss_response()
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.recipes.recipe_service.discuss_recipe",
+        fake_discuss_recipe,
+    )
+
+    response = client.post(
+        "/v1/recipes/discuss",
+        json={"recipe_id": "recipe_stub_001", "question": "How do I prepare it?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "Follow the listed recipe steps."
+
+
+def test_recipe_discuss_endpoint_accepts_recipe_id_and_history(monkeypatch) -> None:
+    async def fake_discuss_recipe(
+        *,
+        recipe_id,
+        candidate_context,
+        question,
+        conversation_history,
+    ):
+        assert recipe_id == "recipe_stub_001"
+        assert candidate_context is None
+        assert question == "How do I prepare it?"
+        assert conversation_history[0].role == "user"
+        assert conversation_history[0].content == "Can you help?"
+        return _recipe_discuss_response()
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.recipes.recipe_service.discuss_recipe",
+        fake_discuss_recipe,
+    )
+
+    response = client.post(
+        "/v1/recipes/discuss",
+        json={
+            "recipe_id": "recipe_stub_001",
+            "question": "How do I prepare it?",
+            "conversation_history": [
+                {"role": "user", "content": "Can you help?"},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "Follow the listed recipe steps."
+
+
+def test_recipe_discuss_endpoint_accepts_recipe_id_and_candidate_context(
+    monkeypatch,
+) -> None:
+    async def fake_discuss_recipe(
+        *,
+        recipe_id,
+        candidate_context,
+        question,
+        conversation_history,
+    ):
+        assert recipe_id == "recipe_001"
+        assert candidate_context is not None
+        assert candidate_context.title == "Tomato Lentil Skillet"
+        assert candidate_context.matched_ingredients == ["lentils"]
+        assert candidate_context.missing_ingredients == ["butter"]
+        assert question == "What can I substitute?"
+        assert conversation_history == []
+        return _recipe_discuss_response()
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.recipes.recipe_service.discuss_recipe",
+        fake_discuss_recipe,
+    )
+
+    response = client.post(
+        "/v1/recipes/discuss",
+        json={
+            "recipe_id": "recipe_001",
+            "candidate_context": {
+                "title": "Tomato Lentil Skillet",
+                "matched_ingredients": ["lentils"],
+                "missing_ingredients": ["butter"],
+            },
+            "question": "What can I substitute?",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["grounded_references"][0]["recipe_id"] == "recipe_001"
+
+
+def _recipe_discuss_response() -> RecipeDiscussResponse:
+    return RecipeDiscussResponse(
+        answer="Follow the listed recipe steps.",
+        grounded_references=[
+            GroundedReference(
+                recipe_id="recipe_001",
+                title="Tomato Lentil Skillet",
+                reference_type="metadata",
+                reference_text="Allrecipes dataset record.",
+            )
+        ],
+        safety_flags=RecipeSafetyFlags(
+            allergen_risk=False,
+            undercooked_risk=False,
+            cross_contamination_risk=False,
+            diet_conflict=False,
+            notes=[],
+        ),
+        warnings=[],
+        latency_ms=12,
+    )
 
 
 def test_vision_identify_returns_structured_response(monkeypatch) -> None:

@@ -123,12 +123,11 @@ def _merge_ingredients(
 @router.post("/discuss", response_model=RecipeDiscussResponse)
 async def discuss_recipe(payload: RecipeDiscussRequest) -> RecipeDiscussResponse:
     try:
-        return recipe_service.discuss_recipe(
+        return await recipe_service.discuss_recipe(
             recipe_id=payload.recipe_id,
-            candidate_title=payload.candidate_context.title
-            if payload.candidate_context
-            else None,
+            candidate_context=payload.candidate_context,
             question=payload.question,
+            conversation_history=payload.conversation_history,
         )
     except NotFoundError as exc:
         raise HTTPException(
